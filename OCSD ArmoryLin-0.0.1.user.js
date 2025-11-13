@@ -392,20 +392,36 @@ const TickerUI = (() => {
     function update() {
         if (!enabled || !tickerElement) return;
 
-        const fields = window.OCSDArmoryLink?.fields;
-        if (!fields) return;
-
-        const tickerFields = fields.forRole('ticker');
+        const AL = window.OCSDArmoryLink;
         const items = [];
 
-        tickerFields.forEach(field => {
-            const value = fields.read(field.key);
-            if (value && value.trim()) {
-                items.push(`<span class="ocsd-ticker-item">
-                    <strong>${field.label}:</strong> ${value}
-                </span>`);
-            }
-        });
+        // Capture mode
+        const captureMode = AL.capture?.getMode() || 'off';
+        const modeColors = { on: '#388e3c', standby: '#f57c00', off: '#757575' };
+        items.push(`<span class="ocsd-ticker-item">
+            <strong>Mode:</strong> <span style="color: ${modeColors[captureMode]}">${captureMode.toUpperCase()}</span>
+        </span>`);
+
+        // Leader status
+        const leaderStatus = AL.broadcast?.getLeaderStatus();
+        const isLeader = leaderStatus ? leaderStatus.isLeader : false;
+        items.push(`<span class="ocsd-ticker-item">
+            <strong>Role:</strong> ${isLeader ? '👑 Leader' : '👤 Worker'}
+        </span>`);
+
+        // Fields with ticker role
+        const fields = AL.fields;
+        if (fields) {
+            const tickerFields = fields.forRole('ticker');
+            tickerFields.forEach(field => {
+                const value = fields.read(field.key);
+                if (value && value.trim()) {
+                    items.push(`<span class="ocsd-ticker-item">
+                        <strong>${field.label}:</strong> ${value}
+                    </span>`);
+                }
+            });
+        }
 
         if (items.length > 0) {
             tickerElement.innerHTML = items.join('');
@@ -1614,6 +1630,282 @@ if (typeof window !== 'undefined') {
 }
 
 // <<< MODULE: scanHistory END
+
+// >>> MODULE: testing START
+
+const TestingModule = (() => {
+    let testResults = [];
+
+    /**
+     * Test a rule against sample data
+     * @param {object} rule - Rule object
+     * @param {string} sampleScan - Sample scan input
+     * @returns {object} Test result
+     */
+    function testRule(rule, sampleScan) {
+        const AL = window.OCSDArmoryLink;
+        const result = {
+            ruleId: rule.id,
+            ruleName: rule.name,
+            sampleScan,
+            timestamp: Date.now(),
+            success: false,
+            matched: false,
+            actions: [],
+            errors: []
+        };
+
+        try {
+            // Test pattern matching
+            const matched = AL.rules?.testPattern(rule, sampleScan);
+            result.matched = matched;
+
+            if (matched) {
+                // Simulate action execution
+                if (rule.actions && Array.isArray(rule.actions)) {
+                    rule.actions.forEach(action => {
+                        try {
+                            const fieldKey = action.field;
+                            const value = action.value;
+
+                            // Check if field exists
+                            const fieldExists = AL.fields?.exists(fieldKey);
+
+                            result.actions.push({
+                                field: fieldKey,
+                                value,
+                                fieldExists,
+                                status: fieldExists ? 'valid' : 'field_not_found'
+                            });
+                        } catch (err) {
+                            result.errors.push(`Action error: ${err.message}`);
+                        }
+                    });
+                }
+                result.success = result.errors.length === 0;
+            }
+        } catch (err) {
+            result.errors.push(`Test error: ${err.message}`);
+            result.success = false;
+        }
+
+        testResults.push(result);
+        return result;
+    }
+
+    /**
+     * Test all rules against sample data
+     * @param {string} sampleScan - Sample scan input
+     * @returns {array} Array of test results
+     */
+    function testAllRules(sampleScan) {
+        const AL = window.OCSDArmoryLink;
+        const rules = AL.rules?.getRules() || [];
+        const results = [];
+
+        rules.forEach(rule => {
+            if (rule.enabled) {
+                const result = testRule(rule, sampleScan);
+                results.push(result);
+            }
+        });
+
+        return results;
+    }
+
+    /**
+     * Test field detection on current page
+     * @returns {object} Detection results
+     */
+    function testFieldDetection() {
+        const AL = window.OCSDArmoryLink;
+        const allFields = AL.fields?.getAll() || {};
+        const results = {
+            total: 0,
+            detected: 0,
+            notDetected: 0,
+            fields: []
+        };
+
+        Object.keys(allFields).forEach(key => {
+            const field = allFields[key];
+            const detected = AL.fields?.detect(key) || false;
+
+            results.total++;
+            if (detected) results.detected++;
+            else results.notDetected++;
+
+            results.fields.push({
+                key,
+                label: field.label,
+                selector: field.selector,
+                detected,
+                isDefault: field.isDefault || false
+            });
+        });
+
+        return results;
+    }
+
+    /**
+     * Generate mock scans for testing
+     * @param {object} options - Generation options
+     * @returns {array} Array of mock scans
+     */
+    function generateMockScans(options = {}) {
+        const count = options.count || 10;
+        const patterns = options.patterns || ['vehicle', 'weapon', 'user', 'generic'];
+        const mocks = [];
+
+        const generators = {
+            vehicle: () => `V${Math.floor(Math.random() * 9000) + 1000}`,
+            weapon: () => `W${Math.floor(Math.random() * 900) + 100}`,
+            user: () => `P${Math.floor(Math.random() * 900000) + 100000}`,
+            taser: () => `X${Math.floor(Math.random() * 900) + 100}${String.fromCharCode(65 + Math.floor(Math.random() * 26))}`,
+            radio: () => `R${Math.floor(Math.random() * 9000) + 1000}`,
+            generic: () => `${String.fromCharCode(65 + Math.floor(Math.random() * 26))}${Math.floor(Math.random() * 90000) + 10000}`
+        };
+
+        for (let i = 0; i < count; i++) {
+            const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+            const generator = generators[pattern] || generators.generic;
+            const directive = Math.random() > 0.5 ? (Math.random() > 0.5 ? '/' : '*') : '';
+            mocks.push({
+                scan: directive + generator(),
+                pattern,
+                directive: directive || 'none'
+            });
+        }
+
+        return mocks;
+    }
+
+    /**
+     * Run full validation suite
+     * @returns {object} Validation report
+     */
+    function runValidation() {
+        const AL = window.OCSDArmoryLink;
+        const report = {
+            timestamp: Date.now(),
+            sections: []
+        };
+
+        // Validate Rules
+        const rulesReport = {
+            section: 'Rules',
+            status: 'passed',
+            issues: [],
+            warnings: []
+        };
+
+        const rules = AL.rules?.getRules() || [];
+        rules.forEach(rule => {
+            if (!rule.name || rule.name.trim() === '') {
+                rulesReport.issues.push(`Rule ${rule.id} has no name`);
+                rulesReport.status = 'failed';
+            }
+            if (!rule.pattern || rule.pattern.trim() === '') {
+                rulesReport.issues.push(`Rule ${rule.name} has no pattern`);
+                rulesReport.status = 'failed';
+            }
+            if (!rule.actions || rule.actions.length === 0) {
+                rulesReport.warnings.push(`Rule ${rule.name} has no actions`);
+            }
+            if (rule.patternType === 'regex') {
+                try {
+                    new RegExp(rule.pattern);
+                } catch (err) {
+                    rulesReport.issues.push(`Rule ${rule.name} has invalid regex: ${err.message}`);
+                    rulesReport.status = 'failed';
+                }
+            }
+        });
+
+        report.sections.push(rulesReport);
+
+        // Validate Fields
+        const fieldsReport = {
+            section: 'Fields',
+            status: 'passed',
+            issues: [],
+            warnings: []
+        };
+
+        const allFields = AL.fields?.getAll() || {};
+        Object.keys(allFields).forEach(key => {
+            const field = allFields[key];
+            if (!field.selector || field.selector.trim() === '') {
+                fieldsReport.issues.push(`Field ${field.label} has no selector`);
+                fieldsReport.status = 'failed';
+            }
+            // Test selector validity
+            try {
+                document.querySelector(field.selector);
+            } catch (err) {
+                fieldsReport.warnings.push(`Field ${field.label} has potentially invalid selector: ${field.selector}`);
+            }
+        });
+
+        report.sections.push(fieldsReport);
+
+        // Validate Prefixes
+        const prefixesReport = {
+            section: 'Prefixes',
+            status: 'passed',
+            issues: [],
+            warnings: []
+        };
+
+        const prefixes = AL.prefixes?.getAll() || [];
+        const activePrefixes = prefixes.filter(p => p.active);
+        if (activePrefixes.length > 1) {
+            prefixesReport.warnings.push(`Multiple active prefixes detected (${activePrefixes.length})`);
+        }
+
+        report.sections.push(prefixesReport);
+
+        // Overall status
+        report.overallStatus = report.sections.every(s => s.status === 'passed') ? 'passed' : 'failed';
+        report.totalIssues = report.sections.reduce((sum, s) => sum + s.issues.length, 0);
+        report.totalWarnings = report.sections.reduce((sum, s) => sum + s.warnings.length, 0);
+
+        return report;
+    }
+
+    /**
+     * Get all test results
+     * @returns {array} Test results
+     */
+    function getTestResults() {
+        return [...testResults];
+    }
+
+    /**
+     * Clear test results
+     */
+    function clearTestResults() {
+        testResults = [];
+    }
+
+    return {
+        testRule,
+        testAllRules,
+        testFieldDetection,
+        generateMockScans,
+        runValidation,
+        getTestResults,
+        clearTestResults
+    };
+})();
+
+// Initialize window.OCSDArmoryLink namespace
+if (typeof window !== 'undefined') {
+    window.OCSDArmoryLink = window.OCSDArmoryLink || {};
+    window.OCSDArmoryLink.testing = TestingModule;
+}
+
+// <<< MODULE: testing END
 
 // >>> MODULE: elements START
 
@@ -3552,8 +3844,12 @@ const UIModule = (() => {
                 <button class="ocsd-tab-btn" data-tab="rules">Rules</button>
                 <button class="ocsd-tab-btn" data-tab="fields">Fields</button>
                 <button class="ocsd-tab-btn" data-tab="prefixes">Prefixes</button>
+                <button class="ocsd-tab-btn" data-tab="macros">Macros</button>
                 <button class="ocsd-tab-btn" data-tab="bwc">BWC</button>
                 <button class="ocsd-tab-btn" data-tab="x10">X10</button>
+                <button class="ocsd-tab-btn" data-tab="favorites">Favorites</button>
+                <button class="ocsd-tab-btn" data-tab="batch">Batch</button>
+                <button class="ocsd-tab-btn" data-tab="history">History</button>
                 <button class="ocsd-tab-btn" data-tab="help">Help</button>
             </div>
             <div class="ocsd-panel-content">
@@ -3709,6 +4005,10 @@ const UIModule = (() => {
                 contentDiv.innerHTML = getPrefixesHTML();
                 attachPrefixesHandlers();
                 break;
+            case 'macros':
+                contentDiv.innerHTML = getMacrosHTML();
+                attachMacrosHandlers();
+                break;
             case 'bwc':
                 contentDiv.innerHTML = getBWCHTML();
                 attachBWCHandlers();
@@ -3716,6 +4016,18 @@ const UIModule = (() => {
             case 'x10':
                 contentDiv.innerHTML = getX10HTML();
                 attachX10Handlers();
+                break;
+            case 'favorites':
+                contentDiv.innerHTML = getFavoritesHTML();
+                attachFavoritesHandlers();
+                break;
+            case 'batch':
+                contentDiv.innerHTML = getBatchHTML();
+                attachBatchHandlers();
+                break;
+            case 'history':
+                contentDiv.innerHTML = getHistoryHTML();
+                attachHistoryHandlers();
                 break;
             case 'help':
                 contentDiv.innerHTML = getHelpHTML();
@@ -4438,6 +4750,212 @@ const UIModule = (() => {
     }
 
     /**
+     * Macros tab HTML
+     */
+    function getMacrosHTML() {
+        const AL = window.OCSDArmoryLink;
+        const macros = AL.macros?.getAll() || [];
+
+        let macrosHTML = macros.length > 0
+            ? macros.map((macro, index) => `
+                <div class="ocsd-macro-item" data-index="${index}">
+                    <div class="ocsd-macro-header">
+                        <strong>${macro.name}</strong>
+                        <div class="ocsd-macro-actions">
+                            <button class="ocsd-btn-small ocsd-btn-primary" data-action="test-macro" data-index="${index}">Test</button>
+                            <button class="ocsd-btn-small ocsd-btn-secondary" data-action="edit-macro" data-index="${index}">Edit</button>
+                            <button class="ocsd-btn-small ocsd-btn-danger" data-action="delete-macro" data-index="${index}">Delete</button>
+                        </div>
+                    </div>
+                    <div class="ocsd-macro-description">${macro.description || 'No description'}</div>
+                    <div class="ocsd-macro-actions-list">
+                        <strong>Actions (${macro.actions?.length || 0}):</strong>
+                        ${(macro.actions || []).map((action, aIndex) => `<div class="ocsd-macro-action-item">${aIndex + 1}. ${action.type}: ${JSON.stringify(action.params || {})}</div>`).join('')}
+                    </div>
+                </div>
+            `).join('')
+            : '<div class="ocsd-empty-state">No macros configured. Click "Add Macro" to create one.</div>';
+
+        return `
+            <h3>Macros</h3>
+            <p>Macros are sequences of automated actions that can be triggered by rules or run manually.</p>
+
+            <div class="ocsd-macro-controls">
+                <button class="ocsd-btn ocsd-btn-primary" id="ocsd-macro-add">Add Macro</button>
+            </div>
+
+            <div class="ocsd-macros-list">
+                ${macrosHTML}
+            </div>
+
+            <div id="ocsd-macro-editor" class="ocsd-modal" style="display: none;">
+                <div class="ocsd-modal-content">
+                    <h4 id="ocsd-macro-editor-title">Add Macro</h4>
+                    <form id="ocsd-macro-form">
+                        <div class="ocsd-form-group">
+                            <label>Macro Name</label>
+                            <input type="text" id="ocsd-macro-name" class="ocsd-input" required placeholder="e.g., Fill Vehicle Info">
+                        </div>
+                        <div class="ocsd-form-group">
+                            <label>Description (optional)</label>
+                            <input type="text" id="ocsd-macro-description" class="ocsd-input" placeholder="Brief description of what this macro does">
+                        </div>
+                        <div class="ocsd-form-group">
+                            <label>Actions</label>
+                            <div id="ocsd-macro-actions-list"></div>
+                            <button type="button" class="ocsd-btn ocsd-btn-secondary" id="ocsd-macro-add-action">Add Action</button>
+                        </div>
+                        <div class="ocsd-form-buttons">
+                            <button type="submit" class="ocsd-btn ocsd-btn-primary">Save Macro</button>
+                            <button type="button" class="ocsd-btn ocsd-btn-secondary" id="ocsd-macro-cancel">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Favorites tab HTML
+     */
+    function getFavoritesHTML() {
+        const AL = window.OCSDArmoryLink;
+        const favorites = AL.persistence?.load('favorites') || [];
+
+        let favoritesHTML = favorites.length > 0
+            ? favorites.map((fav, index) => `
+                <div class="ocsd-favorite-item" data-index="${index}">
+                    <div class="ocsd-favorite-header">
+                        <strong>${fav.name}</strong>
+                        <div class="ocsd-favorite-actions">
+                            <button class="ocsd-btn-small ocsd-btn-primary" data-action="run-favorite" data-index="${index}">Run</button>
+                            <button class="ocsd-btn-small ocsd-btn-danger" data-action="delete-favorite" data-index="${index}">Delete</button>
+                        </div>
+                    </div>
+                    <div class="ocsd-favorite-type">Type: ${fav.type}</div>
+                    <div class="ocsd-favorite-value">${fav.value}</div>
+                </div>
+            `).join('')
+            : '<div class="ocsd-empty-state">No favorites saved. Add frequently used scans, rules, or macros as favorites for quick access.</div>';
+
+        return `
+            <h3>Favorites</h3>
+            <p>Quick access to frequently used scans, rules, and macros.</p>
+
+            <div class="ocsd-favorite-controls">
+                <button class="ocsd-btn ocsd-btn-primary" id="ocsd-favorite-add">Add Favorite</button>
+            </div>
+
+            <div class="ocsd-favorites-list">
+                ${favoritesHTML}
+            </div>
+        `;
+    }
+
+    /**
+     * Batch tab HTML
+     */
+    function getBatchHTML() {
+        return `
+            <h3>Batch Operations</h3>
+            <p>Process multiple scans or operations in batch mode.</p>
+
+            <div class="ocsd-help-section">
+                <h4>Batch Processing</h4>
+                <p>This feature allows you to process multiple scans at once, useful for bulk operations.</p>
+            </div>
+
+            <div class="ocsd-form-group">
+                <label>Batch Input</label>
+                <textarea id="ocsd-batch-input" class="ocsd-input" rows="10" placeholder="Enter one scan per line..."></textarea>
+                <small>Enter one scan value per line. These will be processed sequentially through the rules engine.</small>
+            </div>
+
+            <div class="ocsd-form-group">
+                <label>Options</label>
+                <div class="ocsd-checkbox-group">
+                    <label>
+                        <input type="checkbox" id="ocsd-batch-stop-on-error"> Stop on first error
+                    </label>
+                    <label>
+                        <input type="checkbox" id="ocsd-batch-delay" checked> Add delay between scans (100ms)
+                    </label>
+                </div>
+            </div>
+
+            <div class="ocsd-batch-controls">
+                <button class="ocsd-btn ocsd-btn-primary" id="ocsd-batch-process">Process Batch</button>
+                <button class="ocsd-btn ocsd-btn-secondary" id="ocsd-batch-clear">Clear</button>
+            </div>
+
+            <div class="ocsd-batch-results" id="ocsd-batch-results" style="display: none;">
+                <h4>Batch Results</h4>
+                <div id="ocsd-batch-results-content"></div>
+            </div>
+        `;
+    }
+
+    /**
+     * History tab HTML
+     */
+    function getHistoryHTML() {
+        const AL = window.OCSDArmoryLink;
+        const history = AL.scanHistory?.getAll({ limit: 50 }) || [];
+        const stats = AL.scanHistory?.getStats() || { total: 0, successful: 0, failed: 0, successRate: 0 };
+
+        let historyHTML = history.length > 0
+            ? history.map((entry, index) => {
+                const timestamp = new Date(entry.timestamp).toLocaleString();
+                const statusClass = entry.matched ? 'ocsd-history-success' : 'ocsd-history-failed';
+                return `
+                    <div class="ocsd-history-item ${statusClass}">
+                        <div class="ocsd-history-header">
+                            <span class="ocsd-history-time">${timestamp}</span>
+                            <span class="ocsd-history-status">${entry.matched ? '✓ Matched' : '✗ No match'}</span>
+                        </div>
+                        <div class="ocsd-history-scan"><strong>Scan:</strong> ${entry.scan}</div>
+                        ${entry.rule ? `<div class="ocsd-history-rule"><strong>Rule:</strong> ${entry.rule}</div>` : ''}
+                        ${entry.directive ? `<div class="ocsd-history-directive"><strong>Directive:</strong> ${entry.directive}</div>` : ''}
+                    </div>
+                `;
+            }).join('')
+            : '<div class="ocsd-empty-state">No scan history available.</div>';
+
+        return `
+            <h3>Scan History</h3>
+            <p>Recent scan activity and processing results.</p>
+
+            <div class="ocsd-history-stats">
+                <div class="ocsd-stat-card">
+                    <div class="ocsd-stat-value">${stats.total}</div>
+                    <div class="ocsd-stat-label">Total Scans</div>
+                </div>
+                <div class="ocsd-stat-card">
+                    <div class="ocsd-stat-value">${stats.successful}</div>
+                    <div class="ocsd-stat-label">Successful</div>
+                </div>
+                <div class="ocsd-stat-card">
+                    <div class="ocsd-stat-value">${stats.failed}</div>
+                    <div class="ocsd-stat-label">Failed</div>
+                </div>
+                <div class="ocsd-stat-card">
+                    <div class="ocsd-stat-value">${stats.successRate}%</div>
+                    <div class="ocsd-stat-label">Success Rate</div>
+                </div>
+            </div>
+
+            <div class="ocsd-history-controls">
+                <button class="ocsd-btn ocsd-btn-secondary" id="ocsd-history-export">Export History</button>
+                <button class="ocsd-btn ocsd-btn-danger" id="ocsd-history-clear">Clear History</button>
+            </div>
+
+            <div class="ocsd-history-list">
+                ${historyHTML}
+            </div>
+        `;
+    }
+
+    /**
      * Settings tab HTML
      */
     /**
@@ -4659,6 +5177,18 @@ const UIModule = (() => {
                                     </option>
                                 `).join('')}
                             </select>
+                            <small>${setting.description}</small>
+                        `;
+                        break;
+
+                    case 'text':
+                        html += `
+                            <label>${setting.label}</label>
+                            <input type="text"
+                                   class="ocsd-setting-input ocsd-input"
+                                   data-setting="${settingKey}"
+                                   value="${value || ''}"
+                                   placeholder="${setting.placeholder || ''}" />
                             <small>${setting.description}</small>
                         `;
                         break;
@@ -5337,6 +5867,219 @@ const UIModule = (() => {
                 const testUrl = baseUrl + (queryTemplate || '').replace(/\$\{field:user\}/g, 'TEST_USER');
                 window.open(testUrl, '_blank');
                 AL.stubs?.toast('Opening X10 portal...', 'info', { duration: 2000 });
+            });
+        }
+    }
+
+    /**
+     * Attach handlers for Macros tab
+     */
+    function attachMacrosHandlers() {
+        const AL = window.OCSDArmoryLink;
+
+        // Add macro button
+        const addBtn = document.getElementById('ocsd-macro-add');
+        if (addBtn) {
+            addBtn.addEventListener('click', () => {
+                // Show macro editor
+                const editor = document.getElementById('ocsd-macro-editor');
+                if (editor) {
+                    editor.style.display = 'flex';
+                    document.getElementById('ocsd-macro-editor-title').textContent = 'Add Macro';
+                    document.getElementById('ocsd-macro-form').reset();
+                }
+            });
+        }
+
+        // Cancel button
+        const cancelBtn = document.getElementById('ocsd-macro-cancel');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => {
+                const editor = document.getElementById('ocsd-macro-editor');
+                if (editor) editor.style.display = 'none';
+            });
+        }
+
+        // Test, edit, delete macro buttons
+        document.querySelectorAll('[data-action^="test-macro"]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                const macros = AL.macros?.getAll() || [];
+                const macro = macros[index];
+                if (macro) {
+                    AL.macros?.execute(macro.name);
+                    AL.stubs?.toast(`Executing macro: ${macro.name}`, 'info');
+                }
+            });
+        });
+
+        document.querySelectorAll('[data-action^="delete-macro"]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                const macros = AL.macros?.getAll() || [];
+                const macro = macros[index];
+                if (macro && confirm(`Delete macro "${macro.name}"?`)) {
+                    AL.macros?.delete(macro.name);
+                    loadCurrentTab();
+                    AL.stubs?.toast('Macro deleted', 'success');
+                }
+            });
+        });
+    }
+
+    /**
+     * Attach handlers for Favorites tab
+     */
+    function attachFavoritesHandlers() {
+        const AL = window.OCSDArmoryLink;
+
+        // Add favorite button
+        const addBtn = document.getElementById('ocsd-favorite-add');
+        if (addBtn) {
+            addBtn.addEventListener('click', () => {
+                const name = prompt('Enter favorite name:');
+                if (!name) return;
+
+                const type = prompt('Enter type (scan/rule/macro):');
+                if (!type) return;
+
+                const value = prompt('Enter value:');
+                if (!value) return;
+
+                const favorites = AL.persistence?.load('favorites') || [];
+                favorites.push({ name, type, value });
+                AL.persistence?.save('favorites', favorites);
+
+                loadCurrentTab();
+                AL.stubs?.toast('Favorite added', 'success');
+            });
+        }
+
+        // Run and delete favorite buttons
+        document.querySelectorAll('[data-action^="run-favorite"]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                const favorites = AL.persistence?.load('favorites') || [];
+                const fav = favorites[index];
+                if (fav) {
+                    if (fav.type === 'scan') {
+                        AL.capture?.processManualScan(fav.value);
+                    } else if (fav.type === 'macro') {
+                        AL.macros?.execute(fav.value);
+                    }
+                    AL.stubs?.toast(`Running favorite: ${fav.name}`, 'info');
+                }
+            });
+        });
+
+        document.querySelectorAll('[data-action^="delete-favorite"]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                const favorites = AL.persistence?.load('favorites') || [];
+                if (confirm(`Delete favorite "${favorites[index]?.name}"?`)) {
+                    favorites.splice(index, 1);
+                    AL.persistence?.save('favorites', favorites);
+                    loadCurrentTab();
+                    AL.stubs?.toast('Favorite deleted', 'success');
+                }
+            });
+        });
+    }
+
+    /**
+     * Attach handlers for Batch tab
+     */
+    function attachBatchHandlers() {
+        const AL = window.OCSDArmoryLink;
+
+        // Process batch button
+        const processBtn = document.getElementById('ocsd-batch-process');
+        if (processBtn) {
+            processBtn.addEventListener('click', async () => {
+                const input = document.getElementById('ocsd-batch-input')?.value;
+                if (!input || !input.trim()) {
+                    AL.stubs?.toast('Please enter batch input', 'warn');
+                    return;
+                }
+
+                const scans = input.split('\n').filter(line => line.trim());
+                const stopOnError = document.getElementById('ocsd-batch-stop-on-error')?.checked;
+                const delay = document.getElementById('ocsd-batch-delay')?.checked;
+
+                const resultsDiv = document.getElementById('ocsd-batch-results');
+                const resultsContent = document.getElementById('ocsd-batch-results-content');
+                if (resultsDiv) resultsDiv.style.display = 'block';
+
+                let results = [];
+                for (let i = 0; i < scans.length; i++) {
+                    const scan = scans[i].trim();
+                    if (!scan) continue;
+
+                    try {
+                        await AL.capture?.processManualScan(scan);
+                        results.push(`✓ ${scan}`);
+                    } catch (err) {
+                        results.push(`✗ ${scan}: ${err.message}`);
+                        if (stopOnError) break;
+                    }
+
+                    if (delay && i < scans.length - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                }
+
+                if (resultsContent) {
+                    resultsContent.innerHTML = results.map(r => `<div>${r}</div>`).join('');
+                }
+
+                AL.stubs?.toast(`Processed ${results.length} scans`, 'success');
+            });
+        }
+
+        // Clear button
+        const clearBtn = document.getElementById('ocsd-batch-clear');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                const input = document.getElementById('ocsd-batch-input');
+                if (input) input.value = '';
+                const resultsDiv = document.getElementById('ocsd-batch-results');
+                if (resultsDiv) resultsDiv.style.display = 'none';
+            });
+        }
+    }
+
+    /**
+     * Attach handlers for History tab
+     */
+    function attachHistoryHandlers() {
+        const AL = window.OCSDArmoryLink;
+
+        // Export history button
+        const exportBtn = document.getElementById('ocsd-history-export');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => {
+                const history = AL.scanHistory?.getAll() || [];
+                const dataStr = JSON.stringify(history, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `armorylink-history-${new Date().toISOString()}.json`;
+                link.click();
+                URL.revokeObjectURL(url);
+                AL.stubs?.toast('History exported', 'success');
+            });
+        }
+
+        // Clear history button
+        const clearBtn = document.getElementById('ocsd-history-clear');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                if (confirm('Clear all scan history? This cannot be undone.')) {
+                    AL.scanHistory?.clear();
+                    loadCurrentTab();
+                    AL.stubs?.toast('History cleared', 'success');
+                }
             });
         }
     }
@@ -6798,6 +7541,84 @@ const PrefixesModule = (() => {
         }
     }
 
+    /**
+     * Active (sticky) prefix state
+     */
+    let activePrefix = null;
+
+    /**
+     * Get the currently active (sticky) prefix
+     * @returns {object|null} Active prefix or null
+     */
+    function getActive() {
+        return activePrefix;
+    }
+
+    /**
+     * Set active (sticky) prefix by ID
+     * @param {string} id - Prefix ID
+     * @returns {boolean} Success status
+     */
+    function setActive(id) {
+        init();
+        const prefix = prefixes.find(p => p.id === id);
+        if (prefix) {
+            activePrefix = prefix;
+            if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                window.OCSDArmoryLink.stubs.debugLog('info', 'prefixes', `Activated prefix: ${prefix.name}`);
+            }
+            if (window.OCSDArmoryLink?.stubs?.toast) {
+                window.OCSDArmoryLink.stubs.toast(`Prefix activated: ${prefix.name}`, 'info', { duration: 1500 });
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Clear active (sticky) prefix
+     */
+    function clearActive() {
+        activePrefix = null;
+        if (window.OCSDArmoryLink?.stubs?.toast) {
+            window.OCSDArmoryLink.stubs.toast('Prefix cleared', 'info', { duration: 1500 });
+        }
+    }
+
+    /**
+     * Activate prefix by index (1-9)
+     * @param {number} index - Prefix index (1-9)
+     * @returns {boolean} Success status
+     */
+    function activateByIndex(index) {
+        init();
+        if (index < 1 || index > 9) return false;
+        const prefix = prefixes[index - 1];
+        if (prefix) {
+            return setActive(prefix.id);
+        }
+        return false;
+    }
+
+    /**
+     * Initialize keyboard shortcuts for prefixes
+     */
+    function initKeyboardShortcuts() {
+        document.addEventListener('keydown', (e) => {
+            // Alt+Shift+1 through Alt+Shift+9
+            if (e.altKey && e.shiftKey && e.key >= '1' && e.key <= '9') {
+                e.preventDefault();
+                const index = parseInt(e.key);
+                activateByIndex(index);
+            }
+            // Alt+Shift+0 to clear active prefix
+            else if (e.altKey && e.shiftKey && e.key === '0') {
+                e.preventDefault();
+                clearActive();
+            }
+        }, true);
+    }
+
     return {
         init,
         getAll,
@@ -6807,7 +7628,12 @@ const PrefixesModule = (() => {
         remove,
         clear,
         match,
-        setAll
+        setAll,
+        getActive,
+        setActive,
+        clearActive,
+        activateByIndex,
+        initKeyboardShortcuts
     };
 })();
 
@@ -8239,6 +9065,56 @@ const SettingsCatalog = (() => {
                 x10AutoOpen: { type: 'boolean', default: false, label: 'Auto Open', description: 'Automatically open X10 portal' }
             }
         },
+        activeContext: {
+            label: 'Active Context Detection',
+            settings: {
+                enableActiveContext: { type: 'boolean', default: true, label: 'Enable Active Context', description: 'Detect if ServiceNow tab is active' },
+                contextSelector: { type: 'text', default: 'body', label: 'Context Selector', description: 'CSS selector for active context detection' },
+                autoStandbyInactive: { type: 'boolean', default: true, label: 'Auto Standby When Inactive', description: 'Switch to standby when context is inactive' }
+            }
+        },
+        tabTitle: {
+            label: 'Tab Title Display',
+            settings: {
+                enableTabTitle: { type: 'boolean', default: true, label: 'Enable Dynamic Tab Title', description: 'Update browser tab title with context' },
+                tabTitleTemplate: { type: 'text', default: '${typeIcon} | ${userLast}', label: 'Title Template', description: 'Template for tab title (use ${typeIcon}, ${userLast}, ${field:key})' },
+                updateOnlyWhenLeader: { type: 'boolean', default: true, label: 'Update Only When Leader', description: 'Only leader tab updates title' }
+            }
+        },
+        prefixes: {
+            label: 'Scan Prefixes',
+            settings: {
+                enablePrefixes: { type: 'boolean', default: true, label: 'Enable Prefixes', description: 'Allow prefix activation for scans' },
+                stickyPrefix: { type: 'boolean', default: true, label: 'Sticky Prefix Mode', description: 'Prefix stays active until cleared' },
+                showPrefixToast: { type: 'boolean', default: true, label: 'Show Prefix Toast', description: 'Show notification when prefix activated' }
+            }
+        },
+        macros: {
+            label: 'Macros',
+            settings: {
+                enableMacros: { type: 'boolean', default: true, label: 'Enable Macros', description: 'Allow macro execution' },
+                macroExecutionDelay: { type: 'number', default: 100, label: 'Execution Delay (ms)', description: 'Delay between macro actions', min: 50, max: 1000 },
+                showMacroToast: { type: 'boolean', default: true, label: 'Show Macro Toast', description: 'Show notification when macro runs' }
+            }
+        },
+        fields: {
+            label: 'Field Mapping',
+            settings: {
+                enableFields: { type: 'boolean', default: true, label: 'Enable Field Mapping', description: 'Map fields to ServiceNow elements' },
+                fieldCommitDelay: { type: 'number', default: 300, label: 'Commit Delay (ms)', description: 'Delay before committing field changes', min: 100, max: 2000 },
+                smartSelectorMode: { type: 'boolean', default: true, label: 'Smart Selector Mode', description: 'Use intelligent selector generation' }
+            }
+        },
+        accessibility: {
+            label: 'Accessibility',
+            settings: {
+                enableKeyboardNav: { type: 'boolean', default: true, label: 'Enable Keyboard Navigation', description: 'Full keyboard navigation support' },
+                highContrast: { type: 'boolean', default: false, label: 'High Contrast Mode', description: 'Increase contrast for visibility' },
+                largeUI: { type: 'boolean', default: false, label: 'Large UI Mode', description: 'Increase UI element sizes' },
+                reducedMotion: { type: 'boolean', default: false, label: 'Reduced Motion', description: 'Minimize animations' },
+                showFocusIndicators: { type: 'boolean', default: true, label: 'Focus Indicators', description: 'Show focus outlines on interactive elements' }
+            }
+        },
         advanced: {
             label: 'Advanced',
             settings: {
@@ -8420,6 +9296,23 @@ const SettingsCatalog = (() => {
 
             case 'elementCacheTimeout':
                 AL.elements?.configureCache({ timeout: value });
+                break;
+
+            // Accessibility settings
+            case 'highContrast':
+                document.body.classList.toggle('ocsd-high-contrast', value);
+                break;
+
+            case 'largeUI':
+                document.body.classList.toggle('ocsd-large-ui', value);
+                break;
+
+            case 'reducedMotion':
+                document.body.classList.toggle('ocsd-reduced-motion', value);
+                break;
+
+            case 'showFocusIndicators':
+                document.body.classList.toggle('ocsd-show-focus', value);
                 break;
         }
     }
@@ -9309,6 +10202,44 @@ const InitModule = (() => {
                 outline: none;
                 border-color: #0066cc;
             }
+
+            /* Accessibility Styles */
+            body.ocsd-show-focus *:focus {
+                outline: 3px solid #0066cc !important;
+                outline-offset: 2px;
+            }
+
+            body.ocsd-high-contrast {
+                filter: contrast(1.5);
+            }
+
+            body.ocsd-high-contrast .ocsd-armorylink-panel {
+                border: 2px solid #000;
+            }
+
+            body.ocsd-high-contrast .ocsd-tab-btn {
+                border: 1px solid #666;
+            }
+
+            body.ocsd-large-ui .ocsd-armorylink-panel {
+                font-size: 16px;
+            }
+
+            body.ocsd-large-ui .ocsd-btn {
+                padding: 12px 20px;
+                font-size: 16px;
+            }
+
+            body.ocsd-large-ui .ocsd-tab-btn {
+                padding: 14px 20px;
+                font-size: 16px;
+            }
+
+            body.ocsd-reduced-motion * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
         `;
 
         GM_addStyle(css);
@@ -9442,6 +10373,14 @@ const InitModule = (() => {
             AL.prefixes.setAll(defaults.prefixes || []);
             if (AL.stubs?.debugLog) {
                 AL.stubs.debugLog('info', 'init', `Loaded ${defaults.prefixes?.length || 0} prefixes`);
+            }
+        }
+
+        // Initialize prefix keyboard shortcuts
+        if (AL.prefixes?.initKeyboardShortcuts) {
+            AL.prefixes.initKeyboardShortcuts();
+            if (AL.stubs?.debugLog) {
+                AL.stubs.debugLog('info', 'init', 'Prefix keyboard shortcuts initialized');
             }
         }
 
