@@ -1054,17 +1054,45 @@ const CaptureModule = (() => {
     let mode = 'standby'; // "on", "standby", or "off"
     let queue = [];
     let locked = false;
+    let lockStartTime = null;
     let keyBuffer = '';
     let keyTimer = null;
+    let recentScans = []; // For duplicate detection: [{scan, timestamp}]
 
-    // Configuration
-    const config = {
-        throttleMs: 100,
-        keyTimeout: 50,
-        clearQueueOnOff: true,
-        allowManualInOff: true,
-        minScanLength: 3
-    };
+    // Configuration - loaded from settings
+    function getConfig() {
+        const settings = window.OCSDArmoryLink?.settings;
+        if (!settings) {
+            // Fallback defaults
+            return {
+                throttleMs: 150,
+                duplicateWindowMin: 5,
+                maxExecMs: 10000,
+                clearQueueOnOff: true,
+                allowManualInOff: false,
+                sound: true,
+                toast: true,
+                offlineQueue: false,
+                retrySec: 15,
+                keyTimeout: 50,
+                minScanLength: 3
+            };
+        }
+
+        return {
+            throttleMs: settings.get('throttleMs') || 150,
+            duplicateWindowMin: settings.get('duplicateWindowMin') || 5,
+            maxExecMs: settings.get('maxExecMs') || 10000,
+            clearQueueOnOff: settings.get('clearQueueOnOff') !== false,
+            allowManualInOff: settings.get('allowManualInOff') || false,
+            sound: settings.get('captureSound') !== false,
+            toast: settings.get('captureToast') !== false,
+            offlineQueue: settings.get('offlineQueue') || false,
+            retrySec: settings.get('retrySec') || 15,
+            keyTimeout: 50,
+            minScanLength: 3
+        };
+    }
 
     /**
      * Debug log helper
@@ -1106,6 +1134,7 @@ const CaptureModule = (() => {
 
         const oldMode = mode;
         mode = newMode;
+        const config = getConfig();
 
         switch (newMode) {
             case 'on':
@@ -1133,6 +1162,54 @@ const CaptureModule = (() => {
                 debugLog('info', 'capture', 'Capture mode set to OFF');
                 broadcast('capture:mode', { mode: 'off', previous: oldMode });
                 break;
+        }
+    }
+
+    /**
+     * Check if scan is a duplicate within the window
+     */
+    function isDuplicate(scan) {
+        const config = getConfig();
+        if (config.duplicateWindowMin === 0) return false;
+
+        const now = Date.now();
+        const windowMs = config.duplicateWindowMin * 60 * 1000;
+
+        // Clean old scans
+        recentScans = recentScans.filter(entry => (now - entry.timestamp) < windowMs);
+
+        // Check if this scan exists in recent
+        return recentScans.some(entry => entry.scan === scan);
+    }
+
+    /**
+     * Add scan to recent scans for duplicate tracking
+     */
+    function trackScan(scan) {
+        recentScans.push({
+            scan: scan,
+            timestamp: Date.now()
+        });
+    }
+
+    /**
+     * Check and enforce maxExecMs timeout
+     */
+    function checkLockTimeout() {
+        if (!locked || !lockStartTime) return;
+
+        const config = getConfig();
+        const elapsedMs = Date.now() - lockStartTime;
+
+        if (elapsedMs > config.maxExecMs) {
+            debugLog('warn', 'capture', `Queue lock timeout after ${elapsedMs}ms, forcing unlock`, {
+                maxExecMs: config.maxExecMs
+            });
+            locked = false;
+            lockStartTime = null;
+
+            // Try to process next item
+            setTimeout(() => processNextFromQueue(), 100);
         }
     }
 
@@ -1199,6 +1276,8 @@ const CaptureModule = (() => {
         }
 
         // Accumulate key input (scanner behavior)
+        const config = getConfig();
+
         if (event.key === 'Enter') {
             // End of scan
             if (keyBuffer.length >= config.minScanLength) {
@@ -1246,6 +1325,20 @@ const CaptureModule = (() => {
             return;
         }
 
+        const config = getConfig();
+
+        // Check for duplicates
+        if (isDuplicate(scan)) {
+            debugLog('info', 'capture', 'Duplicate scan filtered', { scan, windowMin: config.duplicateWindowMin });
+            if (config.toast) {
+                window.OCSDArmoryLink?.stubs?.toast(`Duplicate scan filtered: ${scan}`, 'warn', { duration: 2000 });
+            }
+            return;
+        }
+
+        // Track this scan
+        trackScan(scan);
+
         // Log symbol directive hints
         const firstChar = scan.charAt(0);
         let directiveHint = null;
@@ -1261,6 +1354,11 @@ const CaptureModule = (() => {
         queue.push(scan);
         broadcast('capture:enqueued', { scan, queueLength: queue.length });
 
+        // Toast notification
+        if (config.toast) {
+            window.OCSDArmoryLink?.stubs?.toast(`Scan captured: ${scan}`, 'info', { duration: 1500 });
+        }
+
         // Start processing if not locked and in "on" mode
         if (!locked && mode === 'on') {
             processNextFromQueue();
@@ -1275,7 +1373,20 @@ const CaptureModule = (() => {
             return;
         }
 
+        const config = getConfig();
+
+        // Set lock and start timeout monitoring
         locked = true;
+        lockStartTime = Date.now();
+
+        // Start timeout watcher
+        const timeoutWatcher = setInterval(() => checkLockTimeout(), 1000);
+
+        const clearLock = () => {
+            clearInterval(timeoutWatcher);
+            locked = false;
+            lockStartTime = null;
+        };
 
         try {
             let scan = queue.shift();
@@ -1346,7 +1457,7 @@ const CaptureModule = (() => {
             debugLog('error', 'capture', 'Error processing scan', { error: err.message, stack: err.stack });
             broadcast('capture:error', { error: err.message });
         } finally {
-            locked = false;
+            clearLock();
 
             // Schedule next item with throttle
             if (queue.length > 0 && mode === 'on') {
@@ -1366,6 +1477,8 @@ const CaptureModule = (() => {
             debugLog('warn', 'capture', 'Invalid manual scan input');
             return;
         }
+
+        const config = getConfig();
 
         // Check if manual scans are allowed in OFF mode
         if (mode === 'off' && !config.allowManualInOff) {
@@ -8999,9 +9112,20 @@ const SettingsCatalog = (() => {
             label: 'Scan Capture',
             settings: {
                 enableScanCapture: { type: 'boolean', default: true, label: 'Enable Scan Capture', description: 'Capture barcode scanner input' },
-                scanDelay: { type: 'number', default: 100, label: 'Scan Delay (ms)', description: 'Delay between scan characters', min: 50, max: 500 },
-                commitDelay: { type: 'number', default: 300, label: 'Commit Delay (ms)', description: 'Delay before committing field', min: 100, max: 2000 },
-                queueProcessingDelay: { type: 'number', default: 200, label: 'Queue Processing (ms)', description: 'Delay between queue items', min: 100, max: 1000 }
+                captureMode: { type: 'select', default: 'standby', label: 'Default Mode', description: 'Initial capture mode on load', options: [
+                    { value: 'on', label: 'On' },
+                    { value: 'standby', label: 'Standby' },
+                    { value: 'off', label: 'Off' }
+                ]},
+                throttleMs: { type: 'number', default: 150, label: 'Throttle (ms)', description: 'Delay between queue items', min: 50, max: 1000 },
+                duplicateWindowMin: { type: 'number', default: 5, label: 'Duplicate Window (min)', description: 'Minutes to filter duplicate scans', min: 0, max: 60 },
+                maxExecMs: { type: 'number', default: 10000, label: 'Max Execution (ms)', description: 'Timeout to unlock stuck queue', min: 1000, max: 30000 },
+                clearQueueOnOff: { type: 'boolean', default: true, label: 'Clear Queue on Off', description: 'Clear pending scans when capture turns off' },
+                allowManualInOff: { type: 'boolean', default: false, label: 'Allow Manual in Off', description: 'Allow manual scans when capture is off' },
+                captureSound: { type: 'boolean', default: true, label: 'Sound Feedback', description: 'Play sound on scan capture' },
+                captureToast: { type: 'boolean', default: true, label: 'Toast Notifications', description: 'Show toast on scan events' },
+                offlineQueue: { type: 'boolean', default: false, label: 'Offline Queue', description: 'Queue scans when offline' },
+                retrySec: { type: 'number', default: 15, label: 'Retry Delay (sec)', description: 'Seconds before retrying failed scan', min: 5, max: 300 }
             }
         },
         rules: {
@@ -9021,6 +9145,7 @@ const SettingsCatalog = (() => {
                     { value: 'dock-bottom', label: 'Dock Bottom' },
                     { value: 'float', label: 'Float' }
                 ]},
+                topGap: { type: 'number', default: 0, label: 'Top Gap (px)', description: 'Offset from top (dock-right/left-strip only)', min: 0, max: 200 },
                 theme: { type: 'select', default: 'ocsd', label: 'Theme', description: 'Color theme', options: [
                     { value: 'ocsd', label: 'OCSD Official' }
                 ]}
