@@ -1592,9 +1592,9 @@
                 // Get active page context (ensures ticker shows current page's data only)
                 const ctx = AL.pageState && AL.pageState.getActivePageContext ?
                     AL.pageState.getActivePageContext() :
-                    { type: null, userLast: null, vehicle: null, weapon: null, updatedOn: null };
+                    { typeIcon: null, userLast: null, vehicle: null, weapon: null, updatedOn: null };
 
-                const typeValue = ctx.type || 'N/A';
+                const typeIcon = ctx.typeIcon || '⚫';
                 const userValue = ctx.userLast || 'Unknown';
                 const vehicleValue = ctx.vehicle || '';
                 const weaponValue = ctx.weapon || '';
@@ -1632,10 +1632,9 @@
 
                 this.ticker.innerHTML = `
                     <span style="display: flex; align-items: center;"><span class="al-ticker-status-dot ${modeDotClass}"></span></span>
-                    <span>Type: ${typeValue}</span>
-                    <span>User: ${userValue}</span>
-                    ${vehicleValue ? `<span>Vehicle: ${vehicleValue}</span>` : ''}
-                    ${weaponValue ? `<span>Weapon: ${weaponValue}</span>` : ''}
+                    <span>${typeIcon}  ${userValue}</span>
+                    ${vehicleValue ? `<span>${vehicleValue}</span>` : ''}
+                    ${weaponValue ? `<span>${weaponValue}</span>` : ''}
                     ${prefixText ? `<span style="color: ${prefixColor};">${prefixText}</span>` : ''}
                 `;
             } catch (error) {
@@ -3811,6 +3810,11 @@
 
             if (sysId) {
                 return `${path}::${sysId}`;
+            }
+
+            // NEW: Loaner Workspace record → use URL path as stable pageId
+            if (path.includes('/x/g/loaner-workspace/record/')) {
+                return path;   // contains unique -1_uid_X
             }
 
             // Fallback: Try to extract sys_id from iframe content
