@@ -167,6 +167,7 @@
         /**
          * Find element by CSS selector with optional iframe/shadow DOM path
          * Uses deep query by default for shadow DOM piercing
+         * Prefers elements within the active workspace tab when available
          */
         findElement(selector, selectorPath) {
             if (!selector) return null;
@@ -183,8 +184,36 @@
                 // If no path, use deep query to pierce shadow DOM,
                 // but prefer elements that are actually visible (active workspace tab)
                 if (!selectorPath || selectorPath.length === 0) {
-                    // First, collect all matches across document, including shadow roots/iframes
-                    const allMatches = this.querySelectorAllDeep(selector);
+                    // Get the active workspace root if available
+                    let searchRoot = document;
+                    if (AL.pageState && typeof AL.pageState.getActiveRoot === 'function') {
+                        try {
+                            const activeRoot = AL.pageState.getActiveRoot();
+                            if (activeRoot && activeRoot !== document) {
+                                searchRoot = activeRoot;
+                                console.log('[utils] Using active root for search:', searchRoot);
+                            }
+                        } catch (e) {
+                            console.warn('[utils] Error getting active root:', e);
+                        }
+                    }
+
+                    // First, try to find in the active root
+                    if (searchRoot !== document) {
+                        const localMatches = this.querySelectorAllDeep(selector, searchRoot);
+                        if (localMatches && localMatches.length > 0) {
+                            // Prefer visible matches in active root
+                            const visibleMatch = localMatches.find(el => this.isElementVisible(el));
+                            if (visibleMatch) {
+                                return visibleMatch;
+                            }
+                            // Return first match in active root even if not visible
+                            return localMatches[0];
+                        }
+                    }
+
+                    // Fallback: collect all matches across entire document
+                    const allMatches = this.querySelectorAllDeep(selector, document);
 
                     if (allMatches && allMatches.length > 0) {
                         // Prefer the first visible match
@@ -1592,10 +1621,10 @@
                 // Get active page context (ensures ticker shows current page's data only)
                 const ctx = AL.pageState && AL.pageState.getActivePageContext ?
                     AL.pageState.getActivePageContext() :
-                    { typeIcon: null, userLast: null, vehicle: null, weapon: null, updatedOn: null };
+                    { type: null, userLast: null, vehicle: null, weapon: null, updatedOn: null };
 
-                const typeIcon = ctx.typeIcon || '⚫';
-                const userValue = ctx.userLast || 'Unknown';
+                const typeValue = ctx.type || '';
+                const userValue = ctx.userLast || '';
                 const vehicleValue = ctx.vehicle || '';
                 const weaponValue = ctx.weapon || '';
                 const prefixText = AL.prefixes.activePrefix ? `Prefix: ${AL.prefixes.activePrefix.label} (${AL.prefixes.activeStickyCount})` : '';
@@ -1630,11 +1659,17 @@
                 this.ticker.style.backgroundColor = bgColor;
                 this.ticker.style.color = textColor;
 
+                // Build main ticker content: TYPE | LASTNAME | VEHICLE | WEAPON
+                const parts = [];
+                if (typeValue) parts.push(typeValue);
+                if (userValue) parts.push(userValue);
+                if (vehicleValue) parts.push(vehicleValue);
+                if (weaponValue) parts.push(weaponValue);
+                const mainLine = parts.join(' | ');
+
                 this.ticker.innerHTML = `
                     <span style="display: flex; align-items: center;"><span class="al-ticker-status-dot ${modeDotClass}"></span></span>
-                    <span>${userValue}</span>
-                    ${vehicleValue ? `<span>${vehicleValue}</span>` : ''}
-                    ${weaponValue ? `<span>${weaponValue}</span>` : ''}
+                    ${mainLine ? `<span>${mainLine}</span>` : '<span>No data</span>'}
                     ${prefixText ? `<span style="color: ${prefixColor};">${prefixText}</span>` : ''}
                 `;
             } catch (error) {
@@ -3808,16 +3843,52 @@
             const sysId = url.searchParams.get('sysparm_sys_id') || url.searchParams.get('sys_id');
             const path = url.pathname || '';
 
+            // Classic UI with sys_id in URL
             if (sysId) {
                 return `${path}::${sysId}`;
             }
 
-            // NEW: Loaner Workspace record → use URL path as stable pageId
-            if (path.includes('/x/g/loaner-workspace/record/')) {
-                return path;   // contains unique -1_uid_X
+            // For Loaner Workspace, find the selected tab and extract its unique identifier
+            const tabElement = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected') ||
+                               AL.utils.querySelectorDeep('[role="tab"][aria-selected="true"]');
+
+            if (tabElement) {
+                // Try to get tab's unique ID from various attributes
+                const tabId = tabElement.id ||
+                             tabElement.getAttribute('data-tab-id') ||
+                             tabElement.getAttribute('aria-controls');
+
+                if (tabId) {
+                    // Try to find the associated content panel and extract record info
+                    const contentPanel = document.getElementById(tabId) ||
+                                       AL.utils.querySelectorDeep(`[id="${tabId}"]`) ||
+                                       AL.utils.querySelectorDeep(`[aria-labelledby="${tabId}"]`);
+
+                    if (contentPanel) {
+                        // Look for sys_id or unique record identifier in the content
+                        const recordInput = contentPanel.querySelector('input[name="sys_id"]') ||
+                                          contentPanel.querySelector('[data-record-id]');
+
+                        if (recordInput) {
+                            const recordId = recordInput.value || recordInput.getAttribute('data-record-id');
+                            if (recordId && recordId !== '-1') {
+                                return `${path}::${recordId}`;
+                            }
+                        }
+                    }
+
+                    // Use tab ID as stable identifier
+                    return `${path}::tab-${tabId}`;
+                }
+
+                // Fallback: Use or create a per-tab unique ID
+                if (!tabElement.dataset.alPageId) {
+                    tabElement.dataset.alPageId = AL.utils.generateId();
+                }
+                return tabElement.dataset.alPageId;
             }
 
-            // Fallback: Try to extract sys_id from iframe content
+            // Try to extract sys_id from iframe content (classic UI fallback)
             const contentIframe = document.querySelector('iframe[name*="gsft"]');
             if (contentIframe && contentIframe.contentWindow) {
                 try {
@@ -3831,16 +3902,73 @@
                 }
             }
 
-            // Last resort: Use tab element as identifier
-            const tabElement = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected');
-            if (tabElement) {
-                if (!tabElement.dataset.alPageId) {
-                    tabElement.dataset.alPageId = AL.utils.generateId();
-                }
-                return tabElement.dataset.alPageId;
+            return 'default';
+        },
+
+        /**
+         * Get the DOM root for the active workspace tab's content
+         * This helps scope field operations to only the active tab
+         */
+        getActiveRoot() {
+            // Find the active/selected workspace tab
+            const tabElement = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected') ||
+                               AL.utils.querySelectorDeep('[role="tab"][aria-selected="true"]');
+
+            if (!tabElement) {
+                // No specific tab found, use document as root
+                return document;
             }
 
-            return 'default';
+            // Try to find the associated content panel
+            const tabId = tabElement.id ||
+                         tabElement.getAttribute('data-tab-id') ||
+                         tabElement.getAttribute('aria-controls');
+
+            if (tabId) {
+                // Look for the content panel by ID or aria-labelledby
+                const contentPanel = document.getElementById(tabId) ||
+                                   AL.utils.querySelectorDeep(`[id="${tabId}"]`) ||
+                                   AL.utils.querySelectorDeep(`[aria-labelledby="${tabId}"]`) ||
+                                   AL.utils.querySelectorDeep(`[data-tab-id="${tabId}"]`);
+
+                if (contentPanel) {
+                    // Check if content is in an iframe
+                    const iframe = contentPanel.querySelector('iframe');
+                    if (iframe && iframe.contentDocument) {
+                        return iframe.contentDocument;
+                    }
+
+                    // Check if content is in shadow DOM
+                    if (contentPanel.shadowRoot) {
+                        return contentPanel.shadowRoot;
+                    }
+
+                    // Use the content panel itself as root
+                    return contentPanel;
+                }
+            }
+
+            // Fallback: try to find a content container near the selected tab
+            // ServiceNow Workspace often has a structure like:
+            // tabs bar -> content area
+            const workspaceContainer = tabElement.closest('.sn-workspace-container') ||
+                                      tabElement.closest('[role="tablist"]')?.nextElementSibling;
+
+            if (workspaceContainer) {
+                const iframe = workspaceContainer.querySelector('iframe');
+                if (iframe && iframe.contentDocument) {
+                    return iframe.contentDocument;
+                }
+
+                if (workspaceContainer.shadowRoot) {
+                    return workspaceContainer.shadowRoot;
+                }
+
+                return workspaceContainer;
+            }
+
+            // Last resort: use document
+            return document;
         },
 
         /**
