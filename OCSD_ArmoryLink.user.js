@@ -3759,6 +3759,8 @@
 
         init() {
             console.log('[pageState] Initialized');
+            // Initial field read
+            this.refreshActivePage();
         },
 
         /**
