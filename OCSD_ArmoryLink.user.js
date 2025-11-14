@@ -3610,18 +3610,23 @@
          * Get ServiceNow workspace tab label element
          */
         getTabLabelElement() {
-            // Try to find the active tab label in ServiceNow Workspace
-            // Use querySelectorDeep to pierce shadow DOM if needed
-            let tabLabel = AL.utils.querySelectorDeep('.sn-chrome-one-tab-label');
+            // Try to find the SELECTED/ACTIVE tab label in ServiceNow Workspace
+            // The selected tab has class "is-selected"
+            let tabLabel = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected .sn-chrome-one-tab-label');
 
-            // Fallback: try to find the active/focused tab
+            // Fallback: try to find tab with aria-selected="true"
+            if (!tabLabel) {
+                tabLabel = AL.utils.querySelectorDeep('[aria-selected="true"] .sn-chrome-one-tab-label');
+            }
+
+            // Fallback: try to find focused tab
             if (!tabLabel) {
                 tabLabel = AL.utils.querySelectorDeep('.sn-chrome-one-tab.focused .sn-chrome-one-tab-label');
             }
 
-            // Another fallback: try standard query selector
+            // Last resort: try standard query selector for selected tab
             if (!tabLabel) {
-                tabLabel = document.querySelector('.sn-chrome-one-tab-label');
+                tabLabel = document.querySelector('.sn-chrome-one-tab.is-selected .sn-chrome-one-tab-label');
             }
 
             return tabLabel;
