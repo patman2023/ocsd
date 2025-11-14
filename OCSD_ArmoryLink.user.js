@@ -3842,16 +3842,27 @@
 
         deepQueryAllIn(root, sel) {
             const out = [];
-            const walk = (n) => {
-                if (!n) return;
-                if (n.querySelectorAll) {
-                    n.querySelectorAll(sel).forEach((el) => out.push(el));
-                }
-                const tw = (n.ownerDocument || document).createTreeWalker(n, NodeFilter.SHOW_ELEMENT);
-                let cur = n;
-                while (cur) {
-                    if (cur.shadowRoot) walk(cur.shadowRoot);
-                    cur = tw.nextNode();
+            const visited = new WeakSet(); // Prevent infinite loops
+            const walk = (n, depth = 0) => {
+                if (!n || depth > 20) return; // Max depth protection
+                if (visited.has(n)) return; // Circular reference protection
+                visited.add(n);
+
+                try {
+                    if (n.querySelectorAll) {
+                        n.querySelectorAll(sel).forEach((el) => out.push(el));
+                    }
+                    const tw = (n.ownerDocument || document).createTreeWalker(n, NodeFilter.SHOW_ELEMENT);
+                    let cur = n;
+                    let count = 0;
+                    while (cur && count++ < 10000) { // Max iterations protection
+                        if (cur.shadowRoot && !visited.has(cur.shadowRoot)) {
+                            walk(cur.shadowRoot, depth + 1);
+                        }
+                        cur = tw.nextNode();
+                    }
+                } catch (e) {
+                    console.error('[pageState] deepQueryAllIn error:', e);
                 }
             };
             walk(root);
@@ -3866,7 +3877,13 @@
          * Tab discovery (from Tabbed Names pattern)
          */
         tabLis() {
-            return this.deepAll('li.sn-chrome-one-tab-container');
+            // Tabs are usually at top level, no need for deep search
+            try {
+                return Array.from(document.querySelectorAll('li.sn-chrome-one-tab-container'));
+            } catch (e) {
+                console.error('[pageState] Error finding tabs:', e);
+                return [];
+            }
         },
 
         tabA(li) {
@@ -3888,11 +3905,19 @@
         init() {
             console.log('[pageState] Initializing with tab-based tracking');
 
-            // Initial apply
-            this.apply();
+            // Throttle apply calls to prevent excessive execution
+            let applyPending = false;
+            const throttledApply = () => {
+                if (applyPending) return;
+                applyPending = true;
+                setTimeout(() => {
+                    applyPending = false;
+                    this.apply();
+                }, 100);
+            };
 
-            // MutationObserver on document.documentElement
-            this._mutationObserver = new MutationObserver(() => this.apply());
+            // MutationObserver on document.documentElement (throttled)
+            this._mutationObserver = new MutationObserver(throttledApply);
             this._mutationObserver.observe(document.documentElement, {
                 childList: true,
                 subtree: true
@@ -3901,7 +3926,7 @@
             // Click listener on tabs
             this._clickListener = (e) => {
                 if (e.target.closest?.('a[role="tab"], li.sn-chrome-one-tab-container')) {
-                    setTimeout(() => this.apply(), 0);
+                    setTimeout(() => this.apply(), 100);
                 }
             };
             document.addEventListener('click', this._clickListener, true);
@@ -3914,7 +3939,10 @@
                     clearInterval(this._initInterval);
                     console.log('[pageState] Initialization interval cleared');
                 }
-            }, 500);
+            }, 1000); // Run every 1 second instead of 500ms
+
+            // Initial apply after a delay to ensure AL.fields is ready
+            setTimeout(() => this.apply(), 500);
 
             console.log('[pageState] Initialized with tab-based tracking');
         },
@@ -3965,8 +3993,13 @@
          * Find visible field element using deep search
          */
         findVisibleField(fieldKey) {
+            // Guard: ensure AL.fields is ready
+            if (!AL.fields || !AL.fields.getField) {
+                return null;
+            }
+
             const field = AL.fields.getField(fieldKey);
-            if (!field) return null;
+            if (!field || !field.selector) return null;
 
             try {
                 // Deep search for all matching elements
@@ -3974,7 +4007,7 @@
 
                 // Find the first visible one
                 for (const el of matches) {
-                    if (AL.utils.isElementVisible(el)) {
+                    if (AL.utils && AL.utils.isElementVisible && AL.utils.isElementVisible(el)) {
                         return el;
                     }
                 }
@@ -4028,6 +4061,12 @@
          */
         readFieldsAndUpdate(ctx) {
             try {
+                // Guard: ensure AL.fields is ready
+                if (!AL.fields || !AL.fields.getField) {
+                    console.log('[pageState] AL.fields not ready yet, skipping field read');
+                    return ctx;
+                }
+
                 // Read field values from visible elements
                 const typeValue = this.readFieldValue('type');
                 const userValue = this.readFieldValue('user');
