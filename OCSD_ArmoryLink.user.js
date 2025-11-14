@@ -68,12 +68,23 @@
                 let element = root.querySelector(selector);
                 if (element) return element;
 
-                // If not found, recursively search shadow roots
+                // If not found, recursively search shadow roots and iframes
                 const allElements = root.querySelectorAll('*');
                 for (const el of allElements) {
+                    // Search shadow DOM
                     if (el.shadowRoot) {
                         element = this.querySelectorDeep(selector, el.shadowRoot);
                         if (element) return element;
+                    }
+
+                    // Search same-origin iframes
+                    if (el.tagName === 'IFRAME' && el.contentDocument) {
+                        try {
+                            element = this.querySelectorDeep(selector, el.contentDocument);
+                            if (element) return element;
+                        } catch (e) {
+                            // Ignore cross-origin iframes
+                        }
                     }
                 }
 
@@ -95,12 +106,23 @@
                 const elements = root.querySelectorAll(selector);
                 results.push(...elements);
 
-                // Recursively search shadow roots
+                // Recursively search shadow roots and iframes
                 const allElements = root.querySelectorAll('*');
                 for (const el of allElements) {
+                    // Search shadow DOM
                     if (el.shadowRoot) {
                         const shadowResults = this.querySelectorAllDeep(selector, el.shadowRoot);
                         results.push(...shadowResults);
+                    }
+
+                    // Search same-origin iframes
+                    if (el.tagName === 'IFRAME' && el.contentDocument) {
+                        try {
+                            const frameResults = this.querySelectorAllDeep(selector, el.contentDocument);
+                            results.push(...frameResults);
+                        } catch (e) {
+                            // Ignore cross-origin iframes
+                        }
                     }
                 }
 
@@ -4263,9 +4285,30 @@
          * Ensure all defaults exist in storage
          */
         ensureDefaults() {
-            // Fields
-            if (!AL.persistence.get('fields')) {
+            // Fields - merge defaults with saved configs
+            const savedFields = AL.persistence.get('fields');
+            if (!savedFields) {
+                // No saved fields, use defaults
                 AL.persistence.set('fields', AL.stubs.getDefaultFields());
+            } else {
+                // Merge: add any missing default fields to saved config
+                const defaultFields = AL.stubs.getDefaultFields();
+                const savedFieldKeys = new Set(savedFields.map(f => f.key));
+                let needsUpdate = false;
+
+                // Add missing fields from defaults
+                for (const defaultField of defaultFields) {
+                    if (!savedFieldKeys.has(defaultField.key)) {
+                        savedFields.push(defaultField);
+                        needsUpdate = true;
+                        console.log(`[defaultsManager] Added missing field: ${defaultField.key}`);
+                    }
+                }
+
+                // Save merged config if we added any fields
+                if (needsUpdate) {
+                    AL.persistence.set('fields', savedFields);
+                }
             }
 
             // Rules
