@@ -17,6 +17,25 @@
     'use strict';
 
     // ========================================
+    // ⚠️⚠️⚠️ CRITICAL IMPLEMENTATION NOTE ⚠️⚠️⚠️
+    // ========================================
+    //
+    // This script uses the "Tabbed Names" pattern for per-tab context management.
+    // DO NOT modify AL.pageState or AL.tabTitle without understanding this pattern:
+    //
+    // 1. Contexts are stored in Map<tabId, Context> where tabId = <a role="tab">.id
+    // 2. apply() reads fields ONLY from active tab and updates its context
+    // 3. readFieldsAndUpdate() stores lastTabLabel in the context
+    // 4. refreshUI() calls updateAllTabLabels() which updates ALL tabs
+    // 5. updateAllTabLabels() sets each tab's label from its stored ctx.lastTabLabel
+    // 6. Ticker uses getActiveTabContext() to show only visible subpage data
+    //
+    // This ensures labels/data persist correctly when tabs are reordered.
+    // Breaking this pattern will cause tabs to show wrong data after reordering.
+    //
+    // ========================================
+
+    // ========================================
     // NAMESPACE
     // ========================================
     window.OCSDArmoryLink = window.OCSDArmoryLink || {};
@@ -1524,6 +1543,8 @@
 
         /**
          * Update ticker
+         * Shows active subpage data only with optimized text (no field labels)
+         * Background color represents Type/Updated state
          */
         updateTicker() {
             if (!this.ticker) return;
@@ -1533,21 +1554,27 @@
                 const mode = AL.capture.mode;
                 const modeDotClass = `mode-${mode}`;
 
-                // Get active page context (ensures ticker shows current page's data only)
-                const ctx = AL.pageState && AL.pageState.getActivePageContext ?
-                    AL.pageState.getActivePageContext() :
-                    { type: null, userLast: null, vehicle: null, weapon: null, updatedOn: null };
+                // Get active tab context (ensures ticker shows current visible subpage only)
+                const ctx = AL.pageState?.getActiveTabContext();
+                if (!ctx) return;
 
-                const typeValue = ctx.type || 'N/A';
-                const userValue = ctx.userLast || 'Unknown';
-                const vehicleValue = ctx.vehicle || '';
-                const weaponValue = ctx.weapon || '';
-                const prefixText = AL.prefixes.activePrefix ? `Prefix: ${AL.prefixes.activePrefix.label} (${AL.prefixes.activeStickyCount})` : '';
+                // Get user name (prefer full name, fallback to last name)
+                const nameText = ctx.userFull || ctx.userLast || 'Unknown';
+
+                // Build asset parts (only show if they have values)
+                const assetParts = [];
+                if (ctx.vehicle) assetParts.push(ctx.vehicle);
+                if (ctx.weapon) assetParts.push(ctx.weapon);
+                if (ctx.taser) assetParts.push(ctx.taser);
+                if (ctx.patrol) assetParts.push(ctx.patrol);
+                if (ctx.controlOneRadio) assetParts.push(ctx.controlOneRadio);
+
+                // Get prefix text if active
+                const prefixText = AL.prefixes.activePrefix ?
+                    `Prefix: ${AL.prefixes.activePrefix.label} (${AL.prefixes.activeStickyCount})` : '';
 
                 // Determine ticker styling using helper function
-                const tickerStyle = AL.pageState && AL.pageState.deriveTickerStyle ?
-                    AL.pageState.deriveTickerStyle(ctx) :
-                    'default';
+                const tickerStyle = AL.pageState.deriveTickerStyle(ctx);
 
                 let bgColor = '#2a2a2a';  // default
                 let textColor = '#e0e0e0'; // default
@@ -1574,14 +1601,28 @@
                 this.ticker.style.backgroundColor = bgColor;
                 this.ticker.style.color = textColor;
 
-                this.ticker.innerHTML = `
-                    <span style="display: flex; align-items: center;"><span class="al-ticker-status-dot ${modeDotClass}"></span></span>
-                    <span>Type: ${typeValue}</span>
-                    <span>User: ${userValue}</span>
-                    ${vehicleValue ? `<span>Vehicle: ${vehicleValue}</span>` : ''}
-                    ${weaponValue ? `<span>Weapon: ${weaponValue}</span>` : ''}
-                    ${prefixText ? `<span style="color: ${prefixColor};">${prefixText}</span>` : ''}
+                // Build ticker HTML with optimized format
+                // Format: ●  NAME  |  ASSET1  |  ASSET2  |  ...  [PREFIX]
+                let tickerHTML = `
+                    <span style="display: flex; align-items: center;">
+                        <span class="al-ticker-status-dot ${modeDotClass}"></span>
+                    </span>
+                    <span style="font-weight: 500;">${AL.utils.escapeHtml(nameText)}</span>
                 `;
+
+                // Add assets with separator
+                if (assetParts.length > 0) {
+                    for (const asset of assetParts) {
+                        tickerHTML += `<span>|</span><span>${AL.utils.escapeHtml(asset)}</span>`;
+                    }
+                }
+
+                // Add prefix if active
+                if (prefixText) {
+                    tickerHTML += `<span style="color: ${prefixColor}; margin-left: 10px;">${AL.utils.escapeHtml(prefixText)}</span>`;
+                }
+
+                this.ticker.innerHTML = tickerHTML;
             } catch (error) {
                 console.error('[ui] Error updating ticker:', error);
             }
@@ -2778,53 +2819,231 @@
         },
 
         /**
-         * Show add action dialog
+         * Show add action dialog with proper form controls
          */
         showAddActionDialog() {
-            const actionType = prompt('Select action type:\n\n1. setField - Set a field value\n2. setType - Set the Type field\n3. toast - Show toast notification\n4. speech - Speak text\n\nEnter number (1-4):');
+            // Create action editor modal
+            const actionOverlay = document.createElement('div');
+            actionOverlay.className = 'al-modal-overlay';
+            actionOverlay.id = 'al-modal-action-editor';
+            actionOverlay.style.zIndex = '10000001'; // Above rule editor
 
-            if (!actionType) return;
+            // Get available fields for dropdown
+            const fieldOptions = AL.fields.fields
+                .filter(f => f.enabled)
+                .map(f => `<option value="${f.key}">${f.label} (${f.key})</option>`)
+                .join('');
 
-            let action = null;
+            actionOverlay.innerHTML = `
+                <div class="al-modal" onclick="event.stopPropagation()" style="max-width: 500px;">
+                    <div class="al-modal-header">
+                        <h3>Add Action</h3>
+                        <button class="al-btn al-btn-secondary" onclick="document.getElementById('al-modal-action-editor').remove()">×</button>
+                    </div>
+                    <div class="al-modal-body">
+                        <div class="al-form-group">
+                            <label>Action Type *</label>
+                            <select class="al-input" id="al-action-type">
+                                <option value="">-- Select Action Type --</option>
+                                <option value="setField">Set Field Value</option>
+                                <option value="setType">Set Type Field</option>
+                                <option value="toast">Show Toast Notification</option>
+                                <option value="speech">Speak Text</option>
+                            </select>
+                        </div>
 
-            switch (actionType) {
-                case '1': // setField
-                    const fieldKey = prompt('Enter field key (e.g., user, external_contact, department):');
-                    if (!fieldKey) return;
-                    const fieldValue = prompt('Enter field value (use ${group1}, ${group2}, ${directive}, etc.):');
-                    if (fieldValue === null) return;
-                    action = { type: 'setField', field: fieldKey, value: fieldValue };
-                    break;
+                        <!-- Available Variables Reference -->
+                        <div style="background: #1e1e1e; padding: 12px; margin-bottom: 15px; border-radius: 4px; border-left: 3px solid #4CAF50;">
+                            <div style="font-weight: bold; margin-bottom: 8px; font-size: 13px;">📋 Available Variables:</div>
+                            <div style="font-size: 11px; line-height: 1.6;">
+                                <div style="margin-bottom: 4px;"><code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${scanRaw}</code> - Full scanned barcode (raw)</div>
+                                <div style="margin-bottom: 4px;"><code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${cleanScan}</code> - Scanned barcode (trimmed)</div>
+                                <div style="margin-bottom: 4px;"><code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${last4}</code> - Last 4 characters of barcode</div>
+                                <div style="margin-bottom: 4px;"><code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${directive}</code> - Directive value (Deployment/Return)</div>
+                                <div style="margin-bottom: 4px;"><code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${group1}</code>, <code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${group2}</code>, ... - Regex capture groups</div>
+                            </div>
+                        </div>
 
-                case '2': // setType
-                    const typeValue = prompt('Enter Type value (use ${directive} for dynamic value):');
-                    if (typeValue === null) return;
-                    action = { type: 'setType', value: typeValue };
-                    break;
+                        <!-- setField form -->
+                        <div id="al-action-form-setField" style="display: none;">
+                            <div class="al-form-group">
+                                <label>Field *</label>
+                                <select class="al-input" id="al-action-field">
+                                    <option value="">-- Select Field --</option>
+                                    ${fieldOptions}
+                                    <option value="externalContact">External Loan</option>
+                                    <option value="department">Department</option>
+                                    <option value="comments">Comments</option>
+                                </select>
+                            </div>
+                            <div class="al-form-group">
+                                <label>Value *</label>
+                                <input type="text" class="al-input" id="al-action-field-value" placeholder="e.g., \${scanRaw}, \${cleanScan}, \${group1}">
+                                <small>Use variables from reference above</small>
+                            </div>
+                        </div>
 
-                case '3': // toast
-                    const toastMsg = prompt('Enter toast message:');
-                    if (!toastMsg) return;
-                    action = { type: 'toast', title: 'Notification', message: toastMsg, level: 'info' };
-                    break;
+                        <!-- setType form -->
+                        <div id="al-action-form-setType" style="display: none;">
+                            <div class="al-form-group">
+                                <label>Type Value *</label>
+                                <select class="al-input" id="al-action-type-value">
+                                    <option value="\${directive}">Use Directive Value (Deployment/Return)</option>
+                                    <option value="Deployment">Deployment</option>
+                                    <option value="Return">Return</option>
+                                    <option value="">Other (specify below)</option>
+                                </select>
+                            </div>
+                            <div class="al-form-group" id="al-type-custom-group" style="display: none;">
+                                <label>Custom Type Value</label>
+                                <input type="text" class="al-input" id="al-action-type-custom" placeholder="Enter custom type value">
+                            </div>
+                        </div>
 
-                case '4': // speech
-                    const speechText = prompt('Enter speech text:');
-                    if (!speechText) return;
-                    action = { type: 'speech', text: speechText };
-                    break;
+                        <!-- toast form -->
+                        <div id="al-action-form-toast" style="display: none;">
+                            <div class="al-form-group">
+                                <label>Title</label>
+                                <input type="text" class="al-input" id="al-action-toast-title" value="Notification" placeholder="Toast title">
+                            </div>
+                            <div class="al-form-group">
+                                <label>Message *</label>
+                                <input type="text" class="al-input" id="al-action-toast-message" placeholder="e.g., Scanned: \${last4}">
+                                <small>Use variables from reference above</small>
+                            </div>
+                            <div class="al-form-group">
+                                <label>Level</label>
+                                <select class="al-input" id="al-action-toast-level">
+                                    <option value="info">Info (blue)</option>
+                                    <option value="success">Success (green)</option>
+                                    <option value="warning">Warning (yellow)</option>
+                                    <option value="error">Error (red)</option>
+                                </select>
+                            </div>
+                        </div>
 
-                default:
-                    this.showToast('Invalid Action', 'Unknown action type', 'error');
-                    return;
+                        <!-- speech form -->
+                        <div id="al-action-form-speech" style="display: none;">
+                            <div class="al-form-group">
+                                <label>Speech Text *</label>
+                                <input type="text" class="al-input" id="al-action-speech-text" placeholder="e.g., PID \${last4}">
+                                <small>Use variables from reference above</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="al-modal-footer">
+                        <button class="al-btn al-btn-secondary" onclick="document.getElementById('al-modal-action-editor').remove()">Cancel</button>
+                        <button class="al-btn" id="al-save-action-btn">Add Action</button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(actionOverlay);
+
+            // Close on overlay click
+            actionOverlay.onclick = () => actionOverlay.remove();
+
+            // Show/hide forms based on action type
+            document.getElementById('al-action-type').onchange = (e) => {
+                // Hide all forms
+                document.querySelectorAll('[id^="al-action-form-"]').forEach(el => el.style.display = 'none');
+
+                // Show selected form
+                const selectedType = e.target.value;
+                if (selectedType) {
+                    const formEl = document.getElementById(`al-action-form-${selectedType}`);
+                    if (formEl) formEl.style.display = 'block';
+                }
+            };
+
+            // Show/hide custom type field
+            const typeValueSelect = document.getElementById('al-action-type-value');
+            if (typeValueSelect) {
+                typeValueSelect.onchange = (e) => {
+                    document.getElementById('al-type-custom-group').style.display =
+                        e.target.value === '' ? 'block' : 'none';
+                };
             }
 
-            // Get current actions from modal state
-            const actionsListEl = document.getElementById('al-rule-actions-list');
-            const currentActions = this._modalActions || [];
-            currentActions.push(action);
-            this._modalActions = currentActions;
-            this.renderRuleActions(currentActions);
+            // Save action button
+            document.getElementById('al-save-action-btn').onclick = () => {
+                const actionType = document.getElementById('al-action-type').value;
+                if (!actionType) {
+                    this.showToast('Validation Error', 'Please select an action type', 'error');
+                    return;
+                }
+
+                let action = null;
+
+                switch (actionType) {
+                    case 'setField':
+                        const field = document.getElementById('al-action-field').value;
+                        const fieldValue = document.getElementById('al-action-field-value').value.trim();
+
+                        if (!field) {
+                            this.showToast('Validation Error', 'Please select a field', 'error');
+                            return;
+                        }
+                        if (!fieldValue) {
+                            this.showToast('Validation Error', 'Please enter a field value', 'error');
+                            return;
+                        }
+
+                        action = { type: 'setField', field, value: fieldValue };
+                        break;
+
+                    case 'setType':
+                        let typeValue = document.getElementById('al-action-type-value').value;
+                        if (typeValue === '') {
+                            typeValue = document.getElementById('al-action-type-custom').value.trim();
+                        }
+
+                        if (!typeValue) {
+                            this.showToast('Validation Error', 'Please select or enter a type value', 'error');
+                            return;
+                        }
+
+                        action = { type: 'setType', value: typeValue };
+                        break;
+
+                    case 'toast':
+                        const title = document.getElementById('al-action-toast-title').value.trim() || 'Notification';
+                        const message = document.getElementById('al-action-toast-message').value.trim();
+                        const level = document.getElementById('al-action-toast-level').value;
+
+                        if (!message) {
+                            this.showToast('Validation Error', 'Please enter a toast message', 'error');
+                            return;
+                        }
+
+                        action = { type: 'toast', title, message, level };
+                        break;
+
+                    case 'speech':
+                        const speechText = document.getElementById('al-action-speech-text').value.trim();
+
+                        if (!speechText) {
+                            this.showToast('Validation Error', 'Please enter speech text', 'error');
+                            return;
+                        }
+
+                        action = { type: 'speech', text: speechText };
+                        break;
+                }
+
+                if (action) {
+                    // Add action to current list
+                    const currentActions = this._modalActions || [];
+                    currentActions.push(action);
+                    this._modalActions = currentActions;
+                    this.renderRuleActions(currentActions);
+
+                    // Close action editor
+                    actionOverlay.remove();
+
+                    this.showToast('Action Added', 'Action added successfully', 'success');
+                }
+            };
         },
 
         /**
@@ -3373,6 +3592,7 @@
 
         /**
          * Set field value in ServiceNow
+         * Uses pageState to find the visible field on active subpage
          */
         setFieldValue(key, value) {
             const field = this.getField(key);
@@ -3381,9 +3601,10 @@
                 return false;
             }
 
-            const element = AL.utils.findElement(field.selector, field.selectorPath);
+            // Use pageState to find visible field on active subpage
+            const element = AL.pageState?.findVisibleField(key);
             if (!element) {
-                console.warn('[fields] Element not found for field:', key, field.selector);
+                console.warn('[fields] Element not found or not visible for field:', key);
                 return false;
             }
 
@@ -3448,11 +3669,18 @@
 
         /**
          * Get field value from ServiceNow
+         * Uses pageState to read from the active subpage
          */
         getFieldValue(key) {
             const field = this.getField(key);
             if (!field) return null;
 
+            // Use pageState to read field value from active subpage
+            if (AL.pageState && AL.pageState.readFieldValue) {
+                return AL.pageState.readFieldValue(key);
+            }
+
+            // Fallback to direct element access if pageState not available
             const element = AL.utils.findElement(field.selector, field.selectorPath);
             if (!element) return null;
 
@@ -3486,6 +3714,7 @@
 
         /**
          * Test field (highlight and scroll into view)
+         * Uses pageState to find visible field on active subpage
          */
         testField(key) {
             const field = this.getField(key);
@@ -3496,10 +3725,28 @@
                 return false;
             }
 
-            const element = AL.utils.findElement(field.selector, field.selectorPath);
+            // Use pageState to find visible field on active subpage
+            const element = AL.pageState?.findVisibleField(key);
             if (!element) {
+                // Check if element exists in DOM but not visible
+                const anyElement = AL.utils.findElement(field.selector, field.selectorPath);
+                if (anyElement) {
+                    if (AL.ui && AL.ui.showToast) {
+                        AL.ui.showToast('Test Warning', `Field found in DOM but not visible on active subpage: ${field.label}`, 'warning');
+                    }
+                } else {
+                    if (AL.ui && AL.ui.showToast) {
+                        AL.ui.showToast('Test Failed', `Element not found for active subpage: ${field.selector}`, 'error');
+                    }
+                }
+                return false;
+            }
+
+            // Check if element is actually visible
+            const isVisible = AL.pageState?.isElementVisible(element);
+            if (!isVisible) {
                 if (AL.ui && AL.ui.showToast) {
-                    AL.ui.showToast('Test Failed', `Element not found: ${field.selector}`, 'error');
+                    AL.ui.showToast('Test Warning', `Element found but not visible on this subpage: ${field.label}`, 'warning');
                 }
                 return false;
             }
@@ -3508,7 +3755,7 @@
             AL.utils.highlightElement(element);
 
             if (AL.ui && AL.ui.showToast) {
-                AL.ui.showToast('Test Success', `Found: ${field.label}`, 'success');
+                AL.ui.showToast('Test Success', `Found on active subpage: ${field.label}`, 'success');
             }
 
             return true;
@@ -3735,130 +3982,280 @@
     // ========================================
     // MODULE: PAGE_STATE (PageContextStore)
     // ========================================
+    // ⚠️ CRITICAL: This module MUST match the "Tabbed Names" pattern EXACTLY
+    // ⚠️ DO NOT change this implementation without reviewing Tabbed Names first
+    //
+    // Key requirements (DO NOT violate):
+    // 1. Contexts are keyed by <a role="tab"> id (NOT by URL or index)
+    // 2. apply() updates ONLY the active tab's context from visible fields
+    // 3. refreshUI() calls updateAllTabLabels() which updates ALL tabs
+    // 4. Each context stores lastTabLabel computed during readFieldsAndUpdate()
+    // 5. Tab labels come from ctx.lastTabLabel, not from fresh computation
+    // 6. Ticker uses getActiveTabContext() to get visible subpage data
+    //
+    // This ensures labels/data persist correctly when tabs are reordered
     AL.pageState = {
-        // Per-page context store for ServiceNow Workspace tabs
-        pages: {},         // Map of pageId -> context object
-        activePageId: null,  // Currently active page ID
+        // Map<tabId, PageContext> for per-tab state
+        store: new Map(),
+
+        // Throttled apply function to avoid excessive calls
+        _throttledApply: null,
+        _mutationObserver: null,
+        _initialIntervalId: null,
 
         init() {
-            console.log('[pageState] Initialized');
+            // Set up throttled apply
+            this._throttledApply = AL.utils.throttle(() => this.apply(), 100);
+
+            // Initial short-term monitoring (first 60 seconds)
+            let elapsed = 0;
+            this._initialIntervalId = setInterval(() => {
+                this.apply();
+                elapsed += 300;
+                if (elapsed >= 60000) {
+                    clearInterval(this._initialIntervalId);
+                    console.log('[pageState] Initial monitoring period complete');
+                }
+            }, 300);
+
+            // Set up mutation observer on document for tab changes
+            this._mutationObserver = new MutationObserver(() => {
+                this._throttledApply();
+            });
+
+            this._mutationObserver.observe(document.documentElement, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['class', 'aria-selected']
+            });
+
+            // Listen for clicks on tabs
+            document.addEventListener('click', (e) => {
+                const tab = e.target.closest('a[role="tab"]') || e.target.closest('.sn-chrome-one-tab-container');
+                if (tab) {
+                    setTimeout(() => this.apply(), 100);
+                }
+            }, true);
+
+            console.log('[pageState] Initialized with per-tab context store');
         },
 
         /**
-         * Compute stable pageId from URL and ServiceNow tab
+         * Helper functions following "Tabbed Names" pattern
          */
-        computePageId() {
-            // Try URL-based identification first (most stable)
-            const url = new URL(window.location.href);
-            const sysId = url.searchParams.get('sysparm_sys_id') || url.searchParams.get('sys_id');
-            const path = url.pathname || '';
 
-            if (sysId) {
-                return `${path}::${sysId}`;
+        // Get document (for consistency with Tabbed Names pattern)
+        docs() {
+            return [document];
+        },
+
+        // Deep query all elements across shadow DOM
+        deepQueryAllIn(root, selector) {
+            return AL.utils.querySelectorAllDeep(selector, root);
+        },
+
+        // Deep query all in all docs
+        deepAll(selector) {
+            const results = [];
+            for (const doc of this.docs()) {
+                results.push(...this.deepQueryAllIn(doc, selector));
             }
+            return results;
+        },
 
-            // Fallback: Try to extract sys_id from iframe content
-            const contentIframe = document.querySelector('iframe[name*="gsft"]');
-            if (contentIframe && contentIframe.contentWindow) {
-                try {
-                    const iframeUrl = contentIframe.contentWindow.location.href;
-                    const iframeSysId = new URL(iframeUrl).searchParams.get('sys_id');
-                    if (iframeSysId) {
-                        return `${path}::${iframeSysId}`;
-                    }
-                } catch (e) {
-                    // Cross-origin restriction, ignore
+        // Get all tab <li> elements
+        tabLis() {
+            // Find all workspace tab containers
+            return this.deepAll('li.sn-chrome-one-tab-container');
+        },
+
+        // Get <a role="tab"> from a tab <li>
+        tabA(li) {
+            if (!li) return null;
+            return li.querySelector('a[role="tab"]');
+        },
+
+        // Get stable tab ID from tab <li>
+        tabId(li) {
+            const a = this.tabA(li);
+            return a?.id || null;
+        },
+
+        // Check if tab <li> is active/selected
+        isActive(li) {
+            if (!li) return false;
+            // Check for is-selected class
+            if (li.classList.contains('is-selected')) return true;
+            // Check aria-selected on the <a role="tab">
+            const a = this.tabA(li);
+            return a?.getAttribute('aria-selected') === 'true';
+        },
+
+        /**
+         * Create a default page context
+         */
+        createDefaultContext() {
+            return {
+                type: null,
+                typeIcon: '⚫',
+                userFull: null,
+                userLast: null,
+                vehicle: null,
+                weapon: null,
+                taser: null,
+                patrol: null,
+                controlOneRadio: null,
+                updatedOn: null,
+                lastTabLabel: '⚫ | Unknown',
+                lastTickerState: null
+            };
+        },
+
+        /**
+         * Get or create context for a specific tabId
+         */
+        getOrCreateContext(tabId) {
+            if (!this.store.has(tabId)) {
+                this.store.set(tabId, this.createDefaultContext());
+                console.log('[pageState] Created context for tab:', tabId);
+            }
+            return this.store.get(tabId);
+        },
+
+        /**
+         * Get the active tab context (from currently active tab)
+         * Alias for consistency with Tabbed Names pattern
+         */
+        getActiveTabContext() {
+            // Find active tab
+            const tabs = this.tabLis();
+            const activeTab = tabs.find(li => this.isActive(li));
+
+            if (activeTab) {
+                const tid = this.tabId(activeTab);
+                if (tid) {
+                    return this.getOrCreateContext(tid);
                 }
             }
 
-            // Last resort: Use tab element as identifier
-            const tabElement = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected');
-            if (tabElement) {
-                if (!tabElement.dataset.alPageId) {
-                    tabElement.dataset.alPageId = AL.utils.generateId();
-                }
-                return tabElement.dataset.alPageId;
-            }
-
-            return 'default';
+            // Fallback: return a default context
+            return this.createDefaultContext();
         },
 
         /**
-         * Get or create page context for a given pageId
-         */
-        getOrCreatePageContext(pageId) {
-            if (!this.pages[pageId]) {
-                this.pages[pageId] = {
-                    id: pageId,
-                    table: null,
-                    sysId: null,
-                    type: null,
-                    typeIcon: null,
-                    userFull: null,
-                    userLast: null,
-                    vehicle: null,
-                    weapon: null,
-                    taser: null,
-                    patrol: null,
-                    controlOneRadio: null,
-                    comments: null,
-                    updatedOn: null
-                };
-                console.log('[pageState] Created new context for page:', pageId);
-            }
-            return this.pages[pageId];
-        },
-
-        /**
-         * Update page context with partial data
-         */
-        updatePageContext(pageId, partialContext) {
-            const ctx = this.getOrCreatePageContext(pageId);
-            Object.assign(ctx, partialContext);
-            console.log('[pageState] Updated context for page:', pageId, partialContext);
-        },
-
-        /**
-         * Set the active page ID
-         */
-        setActivePageId(pageId) {
-            this.activePageId = pageId;
-            console.log('[pageState] Active page set to:', pageId);
-        },
-
-        /**
-         * Get the active page context
+         * Get the active page context (backward compatibility alias)
          */
         getActivePageContext() {
-            if (!this.activePageId) {
-                this.activePageId = this.computePageId();
-            }
-            return this.getOrCreatePageContext(this.activePageId);
+            return this.getActiveTabContext();
         },
 
         /**
-         * Read fields and update active page context
+         * Find visible field element for the active subpage
          */
-        readFieldsAndUpdate() {
-            try {
-                const pageId = this.computePageId();
-                const ctx = this.getOrCreatePageContext(pageId);
+        findVisibleField(fieldKey) {
+            const field = AL.fields?.getField(fieldKey);
+            if (!field || !field.selector) return null;
 
-                // Read field values (safely)
-                if (!AL.fields || !AL.fields.getFieldValue) {
-                    console.log('[pageState] Fields module not ready, skipping field read');
-                    this.setActivePageId(pageId);
-                    return ctx;
+            try {
+                // Get all matching elements
+                const elements = AL.utils.querySelectorAllDeep(field.selector);
+
+                // Find the first visible one
+                for (const el of elements) {
+                    if (this.isElementVisible(el)) {
+                        return el;
+                    }
                 }
 
-                const typeValue = AL.fields.getFieldValue('type');
-                const userValue = AL.fields.getFieldValue('user');
-                const vehicleValue = AL.fields.getFieldValue('vehicle');
-                const weaponValue = AL.fields.getFieldValue('weapon');
-                const taserValue = AL.fields.getFieldValue('taser');
-                const patrolValue = AL.fields.getFieldValue('patrol');
-                const controlOneRadioValue = AL.fields.getFieldValue('controlOneRadio');
-                const updatedOnValue = AL.fields.getFieldValue('updated_on');
+                return null;
+            } catch (error) {
+                console.log('[pageState] Error finding visible field:', fieldKey, error);
+                return null;
+            }
+        },
+
+        /**
+         * Check if element is visible
+         */
+        isElementVisible(el) {
+            if (!el) return false;
+
+            // Check basic visibility
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+                return false;
+            }
+
+            // Check if element has dimensions
+            const rect = el.getBoundingClientRect();
+            if (rect.width === 0 && rect.height === 0) {
+                return false;
+            }
+
+            return true;
+        },
+
+        /**
+         * Read a field value from the active subpage
+         */
+        readFieldValue(fieldKey) {
+            const element = this.findVisibleField(fieldKey);
+            if (!element) return null;
+
+            try {
+                const field = AL.fields.getField(fieldKey);
+
+                // Special handling for Type field (combobox in shadow DOM)
+                if (fieldKey === 'type' && element.getAttribute('role') === 'combobox') {
+                    // Get the displayed text from the trigger button
+                    const labelElement = element.querySelector('.now-select-trigger-label');
+                    if (labelElement) {
+                        return labelElement.textContent?.trim() || null;
+                    }
+                    // Fallback to aria-label or button text
+                    return element.textContent?.trim() || element.getAttribute('aria-label') || null;
+                }
+
+                // Standard handling for other fields
+                if (element.tagName === 'SELECT') {
+                    return element.options[element.selectedIndex]?.text || element.value;
+                } else if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+                    return element.value;
+                } else if (element.tagName === 'BUTTON') {
+                    return element.textContent?.trim() || null;
+                } else {
+                    return element.textContent?.trim() || null;
+                }
+            } catch (error) {
+                console.log('[pageState] Error reading field:', fieldKey, error);
+                return null;
+            }
+        },
+
+        /**
+         * Read fields and update the provided context
+         *
+         * ⚠️ CRITICAL: This function MUST store lastTabLabel in the context
+         * ⚠️ DO NOT remove ctx.lastTabLabel assignment - it's used by updateAllTabLabels()
+         * ⚠️ This ensures labels persist when tabs are reordered
+         */
+        readFieldsAndUpdate(ctx) {
+            if (!AL.fields) {
+                console.log('[pageState] Fields module not ready');
+                return;
+            }
+
+            try {
+                // Read all field values (only from visible/active subpage)
+                const typeValue = this.readFieldValue('type');
+                const userValue = this.readFieldValue('user');
+                const vehicleValue = this.readFieldValue('vehicle');
+                const weaponValue = this.readFieldValue('weapon');
+                const taserValue = this.readFieldValue('taser');
+                const patrolValue = this.readFieldValue('patrol');
+                const controlOneRadioValue = this.readFieldValue('controlOneRadio');
+                const updatedOnValue = this.readFieldValue('updated_on');
 
                 // Update context
                 ctx.type = typeValue;
@@ -3873,9 +4270,10 @@
 
                 // Set type icon
                 if (typeValue) {
-                    if (typeValue.toLowerCase().includes('deploy')) {
+                    const tl = typeValue.toLowerCase();
+                    if (tl.includes('deploy')) {
                         ctx.typeIcon = '🟡';
-                    } else if (typeValue.toLowerCase().includes('return')) {
+                    } else if (tl.includes('return')) {
                         ctx.typeIcon = '🟢';
                     } else {
                         ctx.typeIcon = '⚫';
@@ -3884,13 +4282,69 @@
                     ctx.typeIcon = '⚫';
                 }
 
-                this.setActivePageId(pageId);
-                return ctx;
+                // ⚠️ CRITICAL: Compute and store tab label in context (Tabbed Names pattern)
+                // This stored label is used by updateAllTabLabels() to set all tab labels
+                const icon = ctx.typeIcon || '⚫';
+                const lastName = ctx.userLast || 'Unknown';
+                ctx.lastTabLabel = `${icon} | ${lastName}`;
             } catch (error) {
                 console.log('[pageState] Error in readFieldsAndUpdate:', error);
-                // Return a safe default context
-                const pageId = this.activePageId || 'default';
-                return this.getOrCreatePageContext(pageId);
+            }
+        },
+
+        /**
+         * Main apply function - manages per-tab contexts
+         * Called on init, tab switches, and DOM changes
+         *
+         * ⚠️ CRITICAL: This function MUST update ONLY the active tab's context
+         * ⚠️ DO NOT change to update all tabs - that would read fields from non-visible pages
+         * ⚠️ refreshUI() will then update ALL tab labels from their stored contexts
+         */
+        apply() {
+            try {
+                // Get current tabs
+                const tabs = this.tabLis();
+                if (tabs.length === 0) {
+                    return; // No tabs found yet
+                }
+
+                // Ensure all visible tabs have contexts
+                const currentTabIds = new Set();
+                for (const li of tabs) {
+                    const tid = this.tabId(li);
+                    if (tid) {
+                        currentTabIds.add(tid);
+                        this.getOrCreateContext(tid);
+                    }
+                }
+
+                // ⚠️ CRITICAL: Find active tab and update ONLY its context
+                // This ensures we only read fields from the currently visible subpage
+                const activeTab = tabs.find(li => this.isActive(li));
+                if (activeTab) {
+                    const tid = this.tabId(activeTab);
+                    if (tid) {
+                        const ctx = this.getOrCreateContext(tid);
+                        this.readFieldsAndUpdate(ctx);  // Only reads visible fields
+                    }
+                }
+
+                // Clean up contexts for closed tabs
+                const tabIdsToDelete = [];
+                for (const tid of this.store.keys()) {
+                    if (!currentTabIds.has(tid)) {
+                        tabIdsToDelete.push(tid);
+                    }
+                }
+                for (const tid of tabIdsToDelete) {
+                    this.store.delete(tid);
+                    console.log('[pageState] Removed context for closed tab:', tid);
+                }
+
+                // Refresh UI
+                this.refreshUI();
+            } catch (error) {
+                console.log('[pageState] Error in apply:', error);
             }
         },
 
@@ -3935,52 +4389,52 @@
         },
 
         /**
-         * Refresh active page (compute page ID, read fields, update UI)
-         * Call this on init and whenever tab/record changes
+         * Refresh active page (for backward compatibility)
          */
         async refreshActivePage(withRetry = false) {
             try {
-                const pageId = this.computePageId();
-                const ctx = this.getOrCreatePageContext(pageId);
-                this.setActivePageId(pageId);
-
                 if (withRetry) {
                     // For tab switches, retry with delays to wait for fields to load
-                    for (let i = 0; i < 5; i++) {
-                        await new Promise(resolve => setTimeout(resolve, i === 0 ? 800 : 400));
-                        this.readFieldsAndUpdate();
+                    for (let i = 0; i < 3; i++) {
+                        await new Promise(resolve => setTimeout(resolve, i === 0 ? 300 : 200));
+                        this.apply();
 
                         // Check if we got meaningful data
-                        const currentCtx = this.getActivePageContext();
-                        if (currentCtx.type || currentCtx.userFull) {
+                        const ctx = this.getActivePageContext();
+                        if (ctx.type || ctx.userFull) {
                             break;
                         }
                     }
                 } else {
-                    // Immediate read
-                    this.readFieldsAndUpdate();
+                    // Immediate apply
+                    this.apply();
                 }
-
-                // Update UI components
-                this.refreshUI();
             } catch (error) {
                 console.log('[pageState] Error in refreshActivePage:', error);
             }
         },
 
         /**
-         * Refresh UI components (ticker and tab title)
+         * Refresh UI components (ticker and ALL tab labels)
+         * Like Tabbed Names: updates every tab label from its context
+         *
+         * ⚠️ CRITICAL: This MUST call updateAllTabLabels(), NOT just update active tab
+         * ⚠️ DO NOT change to only update active tab - all tabs need their labels updated
+         * ⚠️ This is what makes labels persist correctly when tabs are reordered
          */
         refreshUI() {
             try {
-                if (AL.tabTitle && AL.tabTitle.update) {
-                    AL.tabTitle.update();
+                // ⚠️ CRITICAL: Update ALL tab labels from their contexts
+                // This ensures every tab shows the correct label from its stored context
+                if (AL.tabTitle && AL.tabTitle.updateAllTabLabels) {
+                    AL.tabTitle.updateAllTabLabels();
                 }
             } catch (error) {
-                console.log('[pageState] Error updating tab title:', error);
+                console.log('[pageState] Error updating tab labels:', error);
             }
 
             try {
+                // Update ticker from active tab context only
                 if (AL.ui && AL.ui.updateTicker) {
                     AL.ui.updateTicker();
                 }
@@ -4001,271 +4455,64 @@
     // ========================================
     // MODULE: TAB_TITLE
     // ========================================
+    // Tab title formatting for ServiceNow workspace tabs
+    // Exactly like Tabbed Names: updates ALL tab labels from their contexts
     AL.tabTitle = {
         // ServiceNow workspace tab label formatting (TYPE_ICON | LASTNAME)
-        originalTitle: null,
-        originalTooltip: null,
-        typeIcons: {
-            'Deployment': '🟡',  // Yellow dot for Deployment
-            'Return': '🟢',      // Green dot for Return
-            'default': '⚫'      // Black dot for unknown
-        },
 
         init() {
-            // Store original tab label text
-            const tabLabel = this.getTabLabelElement();
-            if (tabLabel) {
-                this.originalTitle = tabLabel.textContent;
-                this.originalTooltip = tabLabel.getAttribute('data-tooltip');
-            }
-            this.update();
-            this.startMonitoring();
+            // Initial update of all tab labels
+            this.updateAllTabLabels();
             console.log('[tabTitle] Initialized');
         },
 
         /**
-         * Start monitoring field changes for automatic updates
+         * Update ALL tab labels from their contexts
+         * This is the Tabbed Names pattern: every tab gets its label from its context
+         *
+         * ⚠️ CRITICAL: This function MUST iterate through ALL tabs, not just active
+         * ⚠️ DO NOT change to only update active tab - that breaks reordering
+         * ⚠️ Each tab's label MUST come from ctx.lastTabLabel (stored during readFieldsAndUpdate)
+         * ⚠️ DO NOT compute labels fresh here - use the stored value from context
          */
-        startMonitoring() {
-            // Track which fields have been attached
-            this._monitoredFields = {};
+        updateAllTabLabels() {
+            if (!AL.pageState) return;
 
-            // Monitor Type and User fields for changes
-            const monitorField = (fieldKey) => {
-                // Skip if already monitoring this field
-                if (this._monitoredFields[fieldKey]) return true;
+            try {
+                // ⚠️ CRITICAL: Get ALL tabs, not just the active one
+                const tabs = AL.pageState.tabLis();
 
-                const field = AL.fields.getField(fieldKey);
-                if (!field) return false;
+                // ⚠️ CRITICAL: Update EACH tab's label from its stored context
+                for (const li of tabs) {
+                    const tid = AL.pageState.tabId(li);
+                    if (!tid) continue;
 
-                const element = AL.utils.findElement(field.selector, field.selectorPath);
-                if (!element) {
-                    console.log(`[tabTitle] Field ${fieldKey} element not found yet, will retry...`);
-                    return false;
+                    // Get or create context for this tab
+                    const ctx = AL.pageState.getOrCreateContext(tid);
+
+                    // Get the label element within this tab
+                    const labelEl = li.querySelector('.sn-chrome-one-tab-label');
+                    if (!labelEl) continue;
+
+                    // ⚠️ CRITICAL: Use the stored lastTabLabel from context
+                    // DO NOT compute it fresh - that would require reading fields from inactive tabs
+                    const label = ctx.lastTabLabel || '⚫ | Unknown';
+
+                    // Update the label text and tooltip
+                    labelEl.textContent = label;
+                    labelEl.setAttribute('data-tooltip', label);
                 }
-
-                // For Type field (combobox in shadow DOM), monitor the button text changes
-                if (fieldKey === 'type' && element.getAttribute('role') === 'combobox') {
-                    // Create a MutationObserver to watch for text changes in the combobox
-                    const observer = new MutationObserver(() => {
-                        console.log('[tabTitle] Type field changed, updating...');
-                        this.update();
-                        if (AL.ui && AL.ui.updateTicker) {
-                            AL.ui.updateTicker();
-                        }
-                    });
-
-                    observer.observe(element, {
-                        childList: true,
-                        subtree: true,
-                        characterData: true
-                    });
-
-                    console.log('[tabTitle] Monitoring Type field for changes');
-                    this._monitoredFields[fieldKey] = true;
-                    return true;
-                }
-
-                // For regular input fields, listen to change and input events
-                if (element.tagName === 'INPUT' || element.tagName === 'SELECT' || element.tagName === 'TEXTAREA') {
-                    element.addEventListener('change', () => {
-                        console.log(`[tabTitle] ${fieldKey} field changed, updating...`);
-                        this.update();
-                        if (AL.ui && AL.ui.updateTicker) {
-                            AL.ui.updateTicker();
-                        }
-                    });
-
-                    element.addEventListener('input', () => {
-                        console.log(`[tabTitle] ${fieldKey} field input, updating...`);
-                        this.update();
-                        if (AL.ui && AL.ui.updateTicker) {
-                            AL.ui.updateTicker();
-                        }
-                    });
-
-                    console.log(`[tabTitle] Monitoring ${fieldKey} field for changes`);
-                    this._monitoredFields[fieldKey] = true;
-                    return true;
-                }
-
-                return false;
-            };
-
-            // Try to monitor fields immediately
-            monitorField('type');
-            monitorField('user');
-
-            // Set up retry mechanism for fields that weren't found (every 2 seconds)
-            const retryInterval = setInterval(() => {
-                const typeAttached = monitorField('type');
-                const userAttached = monitorField('user');
-
-                // If both fields are attached, stop retrying
-                if (typeAttached && userAttached) {
-                    clearInterval(retryInterval);
-                    console.log('[tabTitle] All fields monitored successfully');
-                }
-            }, 2000);
-
-            // Monitor for tab switches in ServiceNow workspace
-            this.monitorTabSwitches();
-
-            // Also set up a periodic update every 2 seconds as a backup
-            setInterval(() => {
-                this.update();
-                if (AL.ui && AL.ui.updateTicker) {
-                    AL.ui.updateTicker();
-                }
-            }, 2000);
-
-            console.log('[tabTitle] Field monitoring started');
+            } catch (error) {
+                console.log('[tabTitle] Error updating all tab labels:', error);
+            }
         },
 
         /**
-         * Monitor ServiceNow workspace tab switches
-         */
-        monitorTabSwitches() {
-            // Find the tab container
-            const findTabContainer = () => {
-                return AL.utils.querySelectorDeep('.sn-chrome-tabs-group') ||
-                       AL.utils.querySelectorDeep('[role="tablist"]') ||
-                       document.querySelector('.sn-chrome-tabs-group') ||
-                       document.querySelector('[role="tablist"]');
-            };
-
-            const setupTabObserver = () => {
-                const tabContainer = findTabContainer();
-                if (!tabContainer) {
-                    console.log('[tabTitle] Tab container not found, will retry...');
-                    return false;
-                }
-
-                console.log('[tabTitle] Found tab container, setting up observer');
-
-                // Watch for attribute changes on tab elements (class changes for is-selected)
-                const tabObserver = new MutationObserver((mutations) => {
-                    for (const mutation of mutations) {
-                        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-                            const target = mutation.target;
-                            // Check if this tab just became selected
-                            if (target.classList && target.classList.contains('is-selected')) {
-                                console.log('[tabTitle] Tab switched detected via MutationObserver');
-                                // Reset field monitoring for new page
-                                this._monitoredFields = {};
-                                // Trigger page state's tab switch handler
-                                if (AL.pageState && AL.pageState.onTabSwitch) {
-                                    AL.pageState.onTabSwitch();
-                                }
-                            }
-                        }
-                    }
-                });
-
-                // Observe all tabs in the container
-                tabObserver.observe(tabContainer, {
-                    attributes: true,
-                    attributeFilter: ['class', 'aria-selected'],
-                    subtree: true
-                });
-
-                console.log('[tabTitle] Tab switch monitoring active');
-                return true;
-            };
-
-            // Try to setup immediately
-            if (!setupTabObserver()) {
-                // Retry every 2 seconds if not found
-                const retryInterval = setInterval(() => {
-                    if (setupTabObserver()) {
-                        clearInterval(retryInterval);
-                    }
-                }, 2000);
-            }
-
-            // Also listen for clicks on tabs as a backup
-            document.addEventListener('click', (e) => {
-                const target = e.target;
-                // Check if clicked element is or is within a tab
-                const tab = target.closest('.sn-chrome-one-tab') || target.closest('[role="tab"]');
-                if (tab) {
-                    console.log('[tabTitle] Tab click detected');
-                    // Reset field monitoring
-                    this._monitoredFields = {};
-                    // Trigger page state's tab switch handler after a short delay
-                    setTimeout(() => {
-                        if (AL.pageState && AL.pageState.onTabSwitch) {
-                            AL.pageState.onTabSwitch();
-                        }
-                    }, 100);
-                }
-            }, true);
-        },
-
-        /**
-         * Get ServiceNow workspace tab label element
-         */
-        getTabLabelElement() {
-            // Try to find the SELECTED/ACTIVE tab label in ServiceNow Workspace
-            // The selected tab has class "is-selected"
-            let tabLabel = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected .sn-chrome-one-tab-label');
-
-            // Fallback: try to find tab with aria-selected="true"
-            if (!tabLabel) {
-                tabLabel = AL.utils.querySelectorDeep('[aria-selected="true"] .sn-chrome-one-tab-label');
-            }
-
-            // Fallback: try to find focused tab
-            if (!tabLabel) {
-                tabLabel = AL.utils.querySelectorDeep('.sn-chrome-one-tab.focused .sn-chrome-one-tab-label');
-            }
-
-            // Last resort: try standard query selector for selected tab
-            if (!tabLabel) {
-                tabLabel = document.querySelector('.sn-chrome-one-tab.is-selected .sn-chrome-one-tab-label');
-            }
-
-            return tabLabel;
-        },
-
-        /**
-         * Update ServiceNow workspace tab label
+         * Update active tab label (backward compatibility)
+         * Now just calls updateAllTabLabels()
          */
         update() {
-            const tabLabel = this.getTabLabelElement();
-            if (!tabLabel) {
-                console.log('[tabTitle] Could not find ServiceNow tab label element');
-                return;
-            }
-
-            // Get active page context
-            const ctx = AL.pageState.getActivePageContext();
-
-            // Format title using context: ICON | LASTNAME
-            const icon = ctx.typeIcon || '⚫';
-            const lastName = ctx.userLast || 'Unknown';
-            const newTitle = `${icon} | ${lastName}`;
-
-            // Update the tab label text
-            tabLabel.textContent = newTitle;
-
-            // Update the tooltip as well
-            tabLabel.setAttribute('data-tooltip', newTitle);
-
-            console.log('[tabTitle] Updated tab label to:', newTitle);
-        },
-
-        /**
-         * Reset to original title
-         */
-        reset() {
-            const tabLabel = this.getTabLabelElement();
-            if (tabLabel && this.originalTitle) {
-                tabLabel.textContent = this.originalTitle;
-                if (this.originalTooltip) {
-                    tabLabel.setAttribute('data-tooltip', this.originalTooltip);
-                }
-            }
+            this.updateAllTabLabels();
         }
     };
 
