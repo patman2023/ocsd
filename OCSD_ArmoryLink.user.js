@@ -182,7 +182,7 @@
 
             try {
                 // If no path, use deep query to pierce shadow DOM,
-                // HARD-SCOPED to active tab only (do NOT fall back to document)
+                // Prefer active tab but allow fallback if nothing visible found
                 if (!selectorPath || selectorPath.length === 0) {
                     // Get the active workspace root
                     let searchRoot = document;
@@ -194,34 +194,50 @@
                             if (activeRoot && activeRoot !== document) {
                                 searchRoot = activeRoot;
                                 hasActiveRoot = true;
-                                // console.log('[utils] Using active root for search');
                             }
                         } catch (e) {
                             console.warn('[utils] Error getting active root:', e);
                         }
                     }
 
-                    // Search within the determined root (active tab or document)
-                    const matches = this.querySelectorAllDeep(selector, searchRoot);
+                    // First priority: Search within active root
+                    if (hasActiveRoot) {
+                        const localMatches = this.querySelectorAllDeep(selector, searchRoot);
+                        if (localMatches && localMatches.length > 0) {
+                            // Prefer visible matches in active root
+                            const visibleMatch = localMatches.find(el => this.isElementVisible(el));
+                            if (visibleMatch) {
+                                return visibleMatch;
+                            }
+                            // Return first match in active root even if not visible
+                            return localMatches[0];
+                        }
+                    }
 
-                    if (matches && matches.length > 0) {
-                        // Prefer visible matches
-                        const visibleMatch = matches.find(el => this.isElementVisible(el));
+                    // Second priority: Search document but ONLY return visible elements
+                    // This prevents returning hidden fields from other tabs
+                    const allMatches = this.querySelectorAllDeep(selector, document);
+                    if (allMatches && allMatches.length > 0) {
+                        // CRITICAL: Only use visible matches to avoid cross-tab contamination
+                        const visibleMatch = allMatches.find(el => this.isElementVisible(el));
                         if (visibleMatch) {
+                            if (hasActiveRoot) {
+                                console.log(`[utils] No match in active root, but found visible element in document for: ${selector}`);
+                            }
                             return visibleMatch;
                         }
-                        // Return first match even if not visible
-                        return matches[0];
+
+                        // If we have an active root but no visible matches anywhere,
+                        // do NOT return hidden elements (prevents tab mixing)
+                        if (hasActiveRoot) {
+                            console.warn(`[utils] No visible match for "${selector}" - refusing to use hidden elements`);
+                            return null;
+                        }
+
+                        // No active root context, return first match as fallback
+                        return allMatches[0];
                     }
 
-                    // NO FALLBACK TO DOCUMENT if we had an active root
-                    // This prevents cross-tab contamination
-                    if (hasActiveRoot) {
-                        console.warn(`[utils] No match for "${selector}" in active tab root - NOT falling back to document`);
-                        return null;
-                    }
-
-                    // Only if there was no active root at all, return null
                     return null;
                 }
 
