@@ -4,7 +4,7 @@
 // @version      0.1.0
 // @description  Barcode-driven armory utility for OCSD ServiceNow
 // @author       P. Akhamlich
-// @match        *://*.service-now.com/*
+// @match        https://ocsheriff.servicenowservices.com/x/g/loaner-workspace/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_addStyle
