@@ -3457,7 +3457,7 @@
                     return element.textContent;
                 }
             } catch (error) {
-                AL.stubs.debug('[fields] Error getting field:', key, error);
+                console.log('[fields] Error getting field:', key, error);
                 return null;
             }
         },
@@ -3719,7 +3719,7 @@
         activePageId: null,  // Currently active page ID
 
         init() {
-            AL.stubs.debug('[pageState] Initialized');
+            console.log('[pageState] Initialized');
         },
 
         /**
@@ -3782,7 +3782,7 @@
                     comments: null,
                     updatedOn: null
                 };
-                AL.stubs.debug('[pageState] Created new context for page:', pageId);
+                console.log('[pageState] Created new context for page:', pageId);
             }
             return this.pages[pageId];
         },
@@ -3793,7 +3793,7 @@
         updatePageContext(pageId, partialContext) {
             const ctx = this.getOrCreatePageContext(pageId);
             Object.assign(ctx, partialContext);
-            AL.stubs.debug('[pageState] Updated context for page:', pageId, partialContext);
+            console.log('[pageState] Updated context for page:', pageId, partialContext);
         },
 
         /**
@@ -3801,7 +3801,7 @@
          */
         setActivePageId(pageId) {
             this.activePageId = pageId;
-            AL.stubs.debug('[pageState] Active page set to:', pageId);
+            console.log('[pageState] Active page set to:', pageId);
         },
 
         /**
@@ -3824,7 +3824,7 @@
 
                 // Read field values (safely)
                 if (!AL.fields || !AL.fields.getFieldValue) {
-                    AL.stubs.debug('[pageState] Fields module not ready, skipping field read');
+                    console.log('[pageState] Fields module not ready, skipping field read');
                     this.setActivePageId(pageId);
                     return ctx;
                 }
@@ -3865,7 +3865,7 @@
                 this.setActivePageId(pageId);
                 return ctx;
             } catch (error) {
-                AL.stubs.debug('[pageState] Error in readFieldsAndUpdate:', error);
+                console.log('[pageState] Error in readFieldsAndUpdate:', error);
                 // Return a safe default context
                 const pageId = this.activePageId || 'default';
                 return this.getOrCreatePageContext(pageId);
@@ -3942,7 +3942,7 @@
                 // Update UI components
                 this.refreshUI();
             } catch (error) {
-                AL.stubs.debug('[pageState] Error in refreshActivePage:', error);
+                console.log('[pageState] Error in refreshActivePage:', error);
             }
         },
 
@@ -3955,7 +3955,7 @@
                     AL.tabTitle.update();
                 }
             } catch (error) {
-                AL.stubs.debug('[pageState] Error updating tab title:', error);
+                console.log('[pageState] Error updating tab title:', error);
             }
 
             try {
@@ -3963,7 +3963,7 @@
                     AL.ui.updateTicker();
                 }
             } catch (error) {
-                AL.stubs.debug('[pageState] Error updating ticker:', error);
+                console.log('[pageState] Error updating ticker:', error);
             }
         },
 
@@ -3971,7 +3971,7 @@
          * Handle tab switch event (called by tab title monitor)
          */
         onTabSwitch() {
-            AL.stubs.debug('[pageState] Tab switch detected, refreshing...');
+            console.log('[pageState] Tab switch detected, refreshing...');
             this.refreshActivePage(true);
         }
     };
@@ -3998,7 +3998,7 @@
             }
             this.update();
             this.startMonitoring();
-            AL.stubs.debug('[tabTitle] Initialized');
+            console.log('[tabTitle] Initialized');
         },
 
         /**
@@ -4018,7 +4018,7 @@
 
                 const element = AL.utils.findElement(field.selector, field.selectorPath);
                 if (!element) {
-                    AL.stubs.debug(`[tabTitle] Field ${fieldKey} element not found yet, will retry...`);
+                    console.log(`[tabTitle] Field ${fieldKey} element not found yet, will retry...`);
                     return false;
                 }
 
@@ -4026,7 +4026,7 @@
                 if (fieldKey === 'type' && element.getAttribute('role') === 'combobox') {
                     // Create a MutationObserver to watch for text changes in the combobox
                     const observer = new MutationObserver(() => {
-                        AL.stubs.debug('[tabTitle] Type field changed, updating...');
+                        console.log('[tabTitle] Type field changed, updating...');
                         this.update();
                         if (AL.ui && AL.ui.updateTicker) {
                             AL.ui.updateTicker();
@@ -4039,7 +4039,7 @@
                         characterData: true
                     });
 
-                    AL.stubs.debug('[tabTitle] Monitoring Type field for changes');
+                    console.log('[tabTitle] Monitoring Type field for changes');
                     this._monitoredFields[fieldKey] = true;
                     return true;
                 }
@@ -4082,7 +4082,7 @@
                 // If both fields are attached, stop retrying
                 if (typeAttached && userAttached) {
                     clearInterval(retryInterval);
-                    AL.stubs.debug('[tabTitle] All fields monitored successfully');
+                    console.log('[tabTitle] All fields monitored successfully');
                 }
             }, 2000);
 
@@ -4097,7 +4097,7 @@
                 }
             }, 2000);
 
-            AL.stubs.debug('[tabTitle] Field monitoring started');
+            console.log('[tabTitle] Field monitoring started');
         },
 
         /**
@@ -4115,11 +4115,11 @@
             const setupTabObserver = () => {
                 const tabContainer = findTabContainer();
                 if (!tabContainer) {
-                    AL.stubs.debug('[tabTitle] Tab container not found, will retry...');
+                    console.log('[tabTitle] Tab container not found, will retry...');
                     return false;
                 }
 
-                AL.stubs.debug('[tabTitle] Found tab container, setting up observer');
+                console.log('[tabTitle] Found tab container, setting up observer');
 
                 // Watch for attribute changes on tab elements (class changes for is-selected)
                 const tabObserver = new MutationObserver((mutations) => {
@@ -4128,7 +4128,7 @@
                             const target = mutation.target;
                             // Check if this tab just became selected
                             if (target.classList && target.classList.contains('is-selected')) {
-                                AL.stubs.debug('[tabTitle] Tab switched detected via MutationObserver');
+                                console.log('[tabTitle] Tab switched detected via MutationObserver');
                                 // Reset field monitoring for new page
                                 this._monitoredFields = {};
                                 // Trigger page state's tab switch handler
@@ -4147,7 +4147,7 @@
                     subtree: true
                 });
 
-                AL.stubs.debug('[tabTitle] Tab switch monitoring active');
+                console.log('[tabTitle] Tab switch monitoring active');
                 return true;
             };
 
@@ -4167,7 +4167,7 @@
                 // Check if clicked element is or is within a tab
                 const tab = target.closest('.sn-chrome-one-tab') || target.closest('[role="tab"]');
                 if (tab) {
-                    AL.stubs.debug('[tabTitle] Tab click detected');
+                    console.log('[tabTitle] Tab click detected');
                     // Reset field monitoring
                     this._monitoredFields = {};
                     // Trigger page state's tab switch handler after a short delay
@@ -4212,7 +4212,7 @@
         update() {
             const tabLabel = this.getTabLabelElement();
             if (!tabLabel) {
-                AL.stubs.debug('[tabTitle] Could not find ServiceNow tab label element');
+                console.log('[tabTitle] Could not find ServiceNow tab label element');
                 return;
             }
 
@@ -4230,7 +4230,7 @@
             // Update the tooltip as well
             tabLabel.setAttribute('data-tooltip', newTitle);
 
-            AL.stubs.debug('[tabTitle] Updated tab label to:', newTitle);
+            console.log('[tabTitle] Updated tab label to:', newTitle);
         },
 
         /**
