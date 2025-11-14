@@ -2875,31 +2875,6 @@
                             </select>
                         </div>
 
-                        <!-- Variable Insertion Tool -->
-                        <div class="al-form-group" style="background: #252525; padding: 12px; margin-bottom: 15px; border-radius: 4px;">
-                            <label style="font-weight: bold; margin-bottom: 8px; display: block;">🔧 Insert Variable</label>
-                            <div style="display: flex; gap: 8px; align-items: flex-start;">
-                                <select class="al-input" id="al-variable-selector" style="flex: 1;">
-                                    <option value="">-- Select Variable to Insert --</option>
-                                    <option value="\${scanRaw}">\${scanRaw} - Full barcode</option>
-                                    <option value="\${cleanScan}">\${cleanScan} - Trimmed barcode</option>
-                                    <option value="\${last4}">\${last4} - Last 4 characters</option>
-                                    <option value="\${directive}">\${directive} - Directive (Deploy/Return)</option>
-                                    <option value="\${group1}">\${group1} - Regex group 1</option>
-                                    <option value="\${group2}">\${group2} - Regex group 2</option>
-                                    <option value="\${group3}">\${group3} - Regex group 3</option>
-                                    <option value="__custom__">Other / Custom regex group...</option>
-                                </select>
-                            </div>
-                            <div id="al-custom-group-container" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #333;">
-                                <label style="font-size: 12px; margin-bottom: 5px; display: block;">Custom Regex Group #</label>
-                                <div style="display: flex; gap: 8px;">
-                                    <input type="number" class="al-input" id="al-custom-group-number" placeholder="e.g., 4, 5, 6..." min="1" style="flex: 1;">
-                                    <button class="al-btn al-btn-secondary" id="al-insert-custom-group-btn" style="white-space: nowrap;">Insert</button>
-                                </div>
-                            </div>
-                        </div>
-
                         <!-- setField form -->
                         <div id="al-action-form-setField" style="display: none;">
                             <div class="al-form-group">
@@ -2915,7 +2890,7 @@
                             <div class="al-form-group">
                                 <label>Value *</label>
                                 <input type="text" class="al-input" id="al-action-field-value" placeholder="e.g., \${scanRaw}, \${cleanScan}, \${group1}">
-                                <small>Use dropdown above to insert variables at cursor</small>
+                                <small>Use dropdown below to insert variables at cursor</small>
                             </div>
                         </div>
 
@@ -2945,7 +2920,7 @@
                             <div class="al-form-group">
                                 <label>Message *</label>
                                 <input type="text" class="al-input" id="al-action-toast-message" placeholder="e.g., Scanned: \${last4}">
-                                <small>Use dropdown above to insert variables at cursor</small>
+                                <small>Use dropdown below to insert variables at cursor</small>
                             </div>
                             <div class="al-form-group">
                                 <label>Level</label>
@@ -2963,7 +2938,32 @@
                             <div class="al-form-group">
                                 <label>Speech Text *</label>
                                 <input type="text" class="al-input" id="al-action-speech-text" placeholder="e.g., PID \${last4}">
-                                <small>Use dropdown above to insert variables at cursor</small>
+                                <small>Use dropdown below to insert variables at cursor</small>
+                            </div>
+                        </div>
+
+                        <!-- Variable Insertion Tool -->
+                        <div class="al-form-group" style="background: #252525; padding: 12px; margin-bottom: 15px; border-radius: 4px;">
+                            <label style="font-weight: bold; margin-bottom: 8px; display: block;">🔧 Insert Variable</label>
+                            <div style="display: flex; gap: 8px; align-items: flex-start;">
+                                <select class="al-input" id="al-variable-selector" style="flex: 1;">
+                                    <option value="">-- Select Variable to Insert --</option>
+                                    <option value="\${scanRaw}">\${scanRaw} - Full barcode</option>
+                                    <option value="\${cleanScan}">\${cleanScan} - Trimmed barcode</option>
+                                    <option value="\${last4}">\${last4} - Last 4 characters</option>
+                                    <option value="\${directive}">\${directive} - Directive (Deploy/Return)</option>
+                                    <option value="\${group1}">\${group1} - Regex group 1</option>
+                                    <option value="\${group2}">\${group2} - Regex group 2</option>
+                                    <option value="\${group3}">\${group3} - Regex group 3</option>
+                                    <option value="__custom__">Other / Custom regex group...</option>
+                                </select>
+                            </div>
+                            <div id="al-custom-group-container" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #333;">
+                                <label style="font-size: 12px; margin-bottom: 5px; display: block;">Custom Regex Group #</label>
+                                <div style="display: flex; gap: 8px;">
+                                    <input type="number" class="al-input" id="al-custom-group-number" placeholder="e.g., 4, 5, 6..." min="1" style="flex: 1;">
+                                    <button class="al-btn al-btn-secondary" id="al-insert-custom-group-btn" style="white-space: nowrap;">Insert</button>
+                                </div>
                             </div>
                         </div>
                     </div>
