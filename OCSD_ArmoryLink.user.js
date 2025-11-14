@@ -3706,6 +3706,7 @@
         // Per-tab state tracking for multi-page support
         pageStates: {},        // Map of pageId -> state object
         activePageId: null,    // Currently active page ID
+        lastActivePageId: null, // Track previous page ID to detect switches
 
         init() {
             console.log('[pageState] Initialized');
@@ -3721,6 +3722,7 @@
                 // Generate or retrieve a unique ID for this tab
                 if (!tabElement.dataset.alPageId) {
                     tabElement.dataset.alPageId = AL.utils.generateId();
+                    console.log('[pageState] Created new page ID:', tabElement.dataset.alPageId, 'for tab:', tabElement.textContent?.trim());
                 }
                 return tabElement.dataset.alPageId;
             }
@@ -3732,6 +3734,7 @@
          */
         getPageState(pageId) {
             if (!this.pageStates[pageId]) {
+                console.log('[pageState] Creating new page state for ID:', pageId);
                 this.pageStates[pageId] = {
                     type: null,
                     typeIcon: '⚫',
@@ -3760,8 +3763,15 @@
         /**
          * Update active page state with current field values
          */
-        updateActiveState() {
+        updateActiveState(force = false) {
             const pageId = this.getActivePageId();
+
+            // Detect if we switched to a different page
+            const switchedPage = this.lastActivePageId && this.lastActivePageId !== pageId;
+            if (switchedPage) {
+                console.log('[pageState] ⚠️ PAGE SWITCH DETECTED! From:', this.lastActivePageId, 'to:', pageId);
+            }
+
             const state = this.getPageState(pageId);
 
             // Read field values
@@ -3774,37 +3784,104 @@
             const controlOneRadioValue = AL.fields.getFieldValue('controlOneRadio');
             const updatedOnValue = AL.fields.getFieldValue('updated_on');
 
-            // Update state
-            state.type = typeValue;
-            state.userFull = userValue;
-            state.vehicle = vehicleValue;
-            state.weapon = weaponValue;
-            state.taser = taserValue;
-            state.patrol = patrolValue;
-            state.controlOneRadio = controlOneRadioValue;
-            state.updatedOn = updatedOnValue;
-            state.lastUpdate = Date.now();
+            // Only update if values have changed or if forced
+            const hasChanges = force ||
+                state.type !== typeValue ||
+                state.userFull !== userValue ||
+                state.vehicle !== vehicleValue ||
+                state.weapon !== weaponValue ||
+                state.taser !== taserValue ||
+                state.patrol !== patrolValue ||
+                state.controlOneRadio !== controlOneRadioValue ||
+                state.updatedOn !== updatedOnValue;
 
-            // Determine type icon
-            const typeIcons = {
-                'Deployment': '🟡',
-                'Return': '🟢',
-                'default': '⚫'
-            };
-            state.typeIcon = typeIcons[typeValue] || typeIcons['default'];
+            if (hasChanges || switchedPage) {
+                // Update state
+                state.type = typeValue;
+                state.userFull = userValue;
+                state.vehicle = vehicleValue;
+                state.weapon = weaponValue;
+                state.taser = taserValue;
+                state.patrol = patrolValue;
+                state.controlOneRadio = controlOneRadioValue;
+                state.updatedOn = updatedOnValue;
+                state.lastUpdate = Date.now();
 
-            // Parse user last name
-            if (userValue) {
-                const parsed = AL.utils.parseName(userValue);
-                state.userLast = parsed.lastUpper;
-            } else {
-                state.userLast = 'UNKNOWN';
+                // Determine type icon
+                const typeIcons = {
+                    'Deployment': '🟡',
+                    'Return': '🟢',
+                    'default': '⚫'
+                };
+                state.typeIcon = typeIcons[typeValue] || typeIcons['default'];
+
+                // Parse user last name
+                if (userValue) {
+                    const parsed = AL.utils.parseName(userValue);
+                    state.userLast = parsed.lastUpper;
+                } else {
+                    state.userLast = 'UNKNOWN';
+                }
+
+                console.log('[pageState] Updated state for page', pageId, '- Type:', typeValue, 'User:', userValue);
             }
 
             this.activePageId = pageId;
+            this.lastActivePageId = pageId;
 
-            console.log('[pageState] Updated state for page', pageId, state);
             return state;
+        },
+
+        /**
+         * Force refresh active state with retry (useful after tab switches)
+         */
+        async forceRefreshActiveState(maxRetries = 3, delayMs = 300) {
+            console.log('[pageState] Force refreshing active state with retries...');
+
+            for (let i = 0; i < maxRetries; i++) {
+                // Wait for DOM to settle
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+
+                // Update state
+                const state = this.updateActiveState(true);
+
+                // Check if we got meaningful data
+                if (state.type || state.userFull) {
+                    console.log('[pageState] Successfully refreshed state on attempt', i + 1);
+                    return state;
+                }
+
+                console.log('[pageState] Retry', i + 1, '- no data yet, waiting...');
+            }
+
+            console.warn('[pageState] Failed to get field data after', maxRetries, 'retries');
+            return this.getActiveState();
+        },
+
+        /**
+         * Handle tab switch event
+         */
+        onTabSwitch() {
+            console.log('[pageState] === TAB SWITCH EVENT ===');
+
+            // Clear the last active page ID to force detection of the switch
+            const oldPageId = this.lastActivePageId;
+            this.lastActivePageId = null;
+
+            // Get new page ID
+            const newPageId = this.getActivePageId();
+            console.log('[pageState] Switched from page', oldPageId, 'to', newPageId);
+
+            // Force refresh with retries
+            this.forceRefreshActiveState(5, 400).then(() => {
+                // Update UI after successful refresh
+                if (AL.tabTitle && AL.tabTitle.update) {
+                    AL.tabTitle.update();
+                }
+                if (AL.ui && AL.ui.updateTicker) {
+                    AL.ui.updateTicker();
+                }
+            });
         },
 
         /**
@@ -3820,6 +3897,7 @@
         clearAllStates() {
             this.pageStates = {};
             this.activePageId = null;
+            this.lastActivePageId = null;
         }
     };
 
@@ -3975,16 +4053,13 @@
                             const target = mutation.target;
                             // Check if this tab just became selected
                             if (target.classList && target.classList.contains('is-selected')) {
-                                console.log('[tabTitle] Tab switched detected, updating...');
+                                console.log('[tabTitle] Tab switched detected via MutationObserver');
                                 // Reset field monitoring for new page
                                 this._monitoredFields = {};
-                                // Update immediately
-                                setTimeout(() => {
-                                    this.update();
-                                    if (AL.ui && AL.ui.updateTicker) {
-                                        AL.ui.updateTicker();
-                                    }
-                                }, 500); // Small delay to let page load
+                                // Trigger page state's tab switch handler
+                                if (AL.pageState && AL.pageState.onTabSwitch) {
+                                    AL.pageState.onTabSwitch();
+                                }
                             }
                         }
                     }
@@ -4017,16 +4092,15 @@
                 // Check if clicked element is or is within a tab
                 const tab = target.closest('.sn-chrome-one-tab') || target.closest('[role="tab"]');
                 if (tab) {
-                    console.log('[tabTitle] Tab click detected, updating...');
+                    console.log('[tabTitle] Tab click detected');
                     // Reset field monitoring
                     this._monitoredFields = {};
-                    // Update after a short delay
+                    // Trigger page state's tab switch handler after a short delay
                     setTimeout(() => {
-                        this.update();
-                        if (AL.ui && AL.ui.updateTicker) {
-                            AL.ui.updateTicker();
+                        if (AL.pageState && AL.pageState.onTabSwitch) {
+                            AL.pageState.onTabSwitch();
                         }
-                    }, 500);
+                    }, 100);
                 }
             }, true);
         },
