@@ -3820,129 +3820,223 @@
     // MODULE: PAGE_STATE (PageContextStore)
     // ========================================
     AL.pageState = {
-        // Per-page context store for ServiceNow Workspace tabs
-        pages: {},         // Map of pageId -> context object
-        activePageId: null,  // Currently active page ID
-
-        init() {
-            console.log('[pageState] Initialized');
-        },
+        // Per-tab context store using Map (keyed by tab id)
+        store: new Map(),  // tabId -> context object
+        _mutationObserver: null,
+        _clickListener: null,
+        _initInterval: null,
 
         /**
-         * Compute stable pageId from URL and ServiceNow tab
+         * Deep DOM helpers (from Tabbed Names pattern)
          */
-        computePageId() {
-            // Try URL-based identification first (most stable)
-            const url = new URL(window.location.href);
-            const sysId = url.searchParams.get('sysparm_sys_id') || url.searchParams.get('sys_id');
-            const path = url.pathname || '';
-
-            if (sysId) {
-                return `${path}::${sysId}`;
-            }
-
-            // Fallback: Try to extract sys_id from iframe content
-            const contentIframe = document.querySelector('iframe[name*="gsft"]');
-            if (contentIframe && contentIframe.contentWindow) {
+        docs() {
+            const all = [document];
+            for (const f of document.querySelectorAll('iframe')) {
                 try {
-                    const iframeUrl = contentIframe.contentWindow.location.href;
-                    const iframeSysId = new URL(iframeUrl).searchParams.get('sys_id');
-                    if (iframeSysId) {
-                        return `${path}::${iframeSysId}`;
-                    }
-                } catch (e) {
-                    // Cross-origin restriction, ignore
+                    const d = f.contentDocument || f.contentWindow?.document;
+                    if (d) all.push(d);
+                } catch (_) {}
+            }
+            return all;
+        },
+
+        deepQueryAllIn(root, sel) {
+            const out = [];
+            const walk = (n) => {
+                if (!n) return;
+                if (n.querySelectorAll) {
+                    n.querySelectorAll(sel).forEach((el) => out.push(el));
                 }
-            }
-
-            // Last resort: Use tab element as identifier
-            const tabElement = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected');
-            if (tabElement) {
-                if (!tabElement.dataset.alPageId) {
-                    tabElement.dataset.alPageId = AL.utils.generateId();
+                const tw = (n.ownerDocument || document).createTreeWalker(n, NodeFilter.SHOW_ELEMENT);
+                let cur = n;
+                while (cur) {
+                    if (cur.shadowRoot) walk(cur.shadowRoot);
+                    cur = tw.nextNode();
                 }
-                return tabElement.dataset.alPageId;
+            };
+            walk(root);
+            return out;
+        },
+
+        deepAll(sel) {
+            return this.docs().flatMap((d) => this.deepQueryAllIn(d, sel));
+        },
+
+        /**
+         * Tab discovery (from Tabbed Names pattern)
+         */
+        tabLis() {
+            return this.deepAll('li.sn-chrome-one-tab-container');
+        },
+
+        tabA(li) {
+            return li.querySelector('a[role="tab"]');
+        },
+
+        tabId(li) {
+            return this.tabA(li)?.id || null;
+        },
+
+        isActive(li) {
+            const a = this.tabA(li);
+            return li.classList.contains('is-selected') || a?.getAttribute('aria-selected') === 'true';
+        },
+
+        /**
+         * Initialize tab tracking with Tabbed Names pattern
+         */
+        init() {
+            console.log('[pageState] Initializing with tab-based tracking');
+
+            // Initial apply
+            this.apply();
+
+            // MutationObserver on document.documentElement
+            this._mutationObserver = new MutationObserver(() => this.apply());
+            this._mutationObserver.observe(document.documentElement, {
+                childList: true,
+                subtree: true
+            });
+
+            // Click listener on tabs
+            this._clickListener = (e) => {
+                if (e.target.closest?.('a[role="tab"], li.sn-chrome-one-tab-container')) {
+                    setTimeout(() => this.apply(), 0);
+                }
+            };
+            document.addEventListener('click', this._clickListener, true);
+
+            // Initial setInterval for 60 seconds to stabilize during load
+            const end = Date.now() + 60000;
+            this._initInterval = setInterval(() => {
+                this.apply();
+                if (Date.now() > end) {
+                    clearInterval(this._initInterval);
+                    console.log('[pageState] Initialization interval cleared');
+                }
+            }, 500);
+
+            console.log('[pageState] Initialized with tab-based tracking');
+        },
+
+        /**
+         * Create default context object
+         */
+        createDefaultContext() {
+            return {
+                type: null,
+                typeIcon: '⚫',
+                userFull: null,
+                userLast: null,
+                vehicle: null,
+                weapon: null,
+                taser: null,
+                patrol: null,
+                controlOneRadio: null,
+                updatedOn: null
+            };
+        },
+
+        /**
+         * Get or create context for a tab id
+         */
+        getOrCreateContext(tabId) {
+            if (!this.store.has(tabId)) {
+                this.store.set(tabId, this.createDefaultContext());
             }
-
-            return 'default';
+            return this.store.get(tabId);
         },
 
         /**
-         * Get or create page context for a given pageId
-         */
-        getOrCreatePageContext(pageId) {
-            if (!this.pages[pageId]) {
-                this.pages[pageId] = {
-                    id: pageId,
-                    table: null,
-                    sysId: null,
-                    type: null,
-                    typeIcon: null,
-                    userFull: null,
-                    userLast: null,
-                    vehicle: null,
-                    weapon: null,
-                    taser: null,
-                    patrol: null,
-                    controlOneRadio: null,
-                    comments: null,
-                    updatedOn: null
-                };
-                console.log('[pageState] Created new context for page:', pageId);
-            }
-            return this.pages[pageId];
-        },
-
-        /**
-         * Update page context with partial data
-         */
-        updatePageContext(pageId, partialContext) {
-            const ctx = this.getOrCreatePageContext(pageId);
-            Object.assign(ctx, partialContext);
-            console.log('[pageState] Updated context for page:', pageId, partialContext);
-        },
-
-        /**
-         * Set the active page ID
-         */
-        setActivePageId(pageId) {
-            this.activePageId = pageId;
-            console.log('[pageState] Active page set to:', pageId);
-        },
-
-        /**
-         * Get the active page context
+         * Get the active tab context
          */
         getActivePageContext() {
-            if (!this.activePageId) {
-                this.activePageId = this.computePageId();
-            }
-            return this.getOrCreatePageContext(this.activePageId);
+            const lis = this.tabLis();
+            const active = lis.find(li => this.isActive(li));
+            if (!active) return this.createDefaultContext();
+
+            const tabId = this.tabId(active);
+            if (!tabId) return this.createDefaultContext();
+
+            return this.getOrCreateContext(tabId);
         },
 
         /**
-         * Read fields and update active page context
+         * Find visible field element using deep search
          */
-        readFieldsAndUpdate() {
-            try {
-                const pageId = this.computePageId();
-                const ctx = this.getOrCreatePageContext(pageId);
+        findVisibleField(fieldKey) {
+            const field = AL.fields.getField(fieldKey);
+            if (!field) return null;
 
-                // Read field values (safely)
-                if (!AL.fields || !AL.fields.getFieldValue) {
-                    console.log('[pageState] Fields module not ready, skipping field read');
-                    this.setActivePageId(pageId);
-                    return ctx;
+            try {
+                // Deep search for all matching elements
+                const matches = this.deepAll(field.selector);
+
+                // Find the first visible one
+                for (const el of matches) {
+                    if (AL.utils.isElementVisible(el)) {
+                        return el;
+                    }
                 }
 
-                const typeValue = AL.fields.getFieldValue('type');
-                const userValue = AL.fields.getFieldValue('user');
-                const vehicleValue = AL.fields.getFieldValue('vehicle');
-                const weaponValue = AL.fields.getFieldValue('weapon');
-                const taserValue = AL.fields.getFieldValue('taser');
-                const patrolValue = AL.fields.getFieldValue('patrol');
-                const controlOneRadioValue = AL.fields.getFieldValue('controlOneRadio');
-                const updatedOnValue = AL.fields.getFieldValue('updated_on');
+                // Fallback: return first match even if not visible
+                return matches[0] || null;
+            } catch (error) {
+                console.error('[pageState] Error finding field:', fieldKey, error);
+                return null;
+            }
+        },
+
+        /**
+         * Read field value from visible element
+         */
+        readFieldValue(fieldKey) {
+            const element = this.findVisibleField(fieldKey);
+            if (!element) return null;
+
+            const field = AL.fields.getField(fieldKey);
+            if (!field) return null;
+
+            try {
+                // Special handling for Type field (combobox in shadow DOM)
+                if (fieldKey === 'type' && element.getAttribute('role') === 'combobox') {
+                    const labelElement = element.querySelector('.now-select-trigger-label');
+                    if (labelElement) {
+                        return labelElement.textContent?.trim() || null;
+                    }
+                    return element.textContent?.trim() || element.getAttribute('aria-label') || null;
+                }
+
+                // Standard handling for other fields
+                if (element.tagName === 'SELECT') {
+                    return element.options[element.selectedIndex]?.text || element.value;
+                } else if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+                    return element.value;
+                } else if (element.tagName === 'BUTTON') {
+                    return element.textContent?.trim() || null;
+                } else {
+                    return element.textContent?.trim() || null;
+                }
+            } catch (error) {
+                console.error('[pageState] Error reading field value:', fieldKey, error);
+                return null;
+            }
+        },
+
+        /**
+         * Read all fields from visible page and update context
+         */
+        readFieldsAndUpdate(ctx) {
+            try {
+                // Read field values from visible elements
+                const typeValue = this.readFieldValue('type');
+                const userValue = this.readFieldValue('user');
+                const vehicleValue = this.readFieldValue('vehicle');
+                const weaponValue = this.readFieldValue('weapon');
+                const taserValue = this.readFieldValue('taser');
+                const patrolValue = this.readFieldValue('patrol');
+                const controlOneRadioValue = this.readFieldValue('controlOneRadio');
+                const updatedOnValue = this.readFieldValue('updated_on');
 
                 // Update context
                 ctx.type = typeValue;
@@ -3968,13 +4062,53 @@
                     ctx.typeIcon = '⚫';
                 }
 
-                this.setActivePageId(pageId);
                 return ctx;
             } catch (error) {
-                console.log('[pageState] Error in readFieldsAndUpdate:', error);
-                // Return a safe default context
-                const pageId = this.activePageId || 'default';
-                return this.getOrCreatePageContext(pageId);
+                console.error('[pageState] Error in readFieldsAndUpdate:', error);
+                return ctx;
+            }
+        },
+
+        /**
+         * Apply function - main coordinator (from Tabbed Names pattern)
+         */
+        apply() {
+            try {
+                const lis = this.tabLis();
+
+                // Ensure every tab has a context in the store
+                lis.forEach((li) => {
+                    const id = this.tabId(li);
+                    if (id && !this.store.has(id)) {
+                        this.store.set(id, this.createDefaultContext());
+                    }
+                });
+
+                // Find the active tab
+                const active = lis.find(li => this.isActive(li));
+                if (active) {
+                    const id = this.tabId(active);
+                    if (id) {
+                        const ctx = this.getOrCreateContext(id);
+                        // Read fields from visible page and update this tab's context
+                        this.readFieldsAndUpdate(ctx);
+                        console.log('[pageState] Updated active tab context:', id, ctx);
+                    }
+                }
+
+                // Clean up store entries for closed tabs
+                const existing = new Set(lis.map(li => this.tabId(li)).filter(Boolean));
+                for (const k of Array.from(this.store.keys())) {
+                    if (!existing.has(k)) {
+                        this.store.delete(k);
+                        console.log('[pageState] Removed context for closed tab:', k);
+                    }
+                }
+
+                // Update UI (ticker)
+                this.refreshUI();
+            } catch (error) {
+                console.error('[pageState] Error in apply:', error);
             }
         },
 
@@ -4019,66 +4153,16 @@
         },
 
         /**
-         * Refresh active page (compute page ID, read fields, update UI)
-         * Call this on init and whenever tab/record changes
-         */
-        async refreshActivePage(withRetry = false) {
-            try {
-                const pageId = this.computePageId();
-                const ctx = this.getOrCreatePageContext(pageId);
-                this.setActivePageId(pageId);
-
-                if (withRetry) {
-                    // For tab switches, retry with delays to wait for fields to load
-                    for (let i = 0; i < 5; i++) {
-                        await new Promise(resolve => setTimeout(resolve, i === 0 ? 800 : 400));
-                        this.readFieldsAndUpdate();
-
-                        // Check if we got meaningful data
-                        const currentCtx = this.getActivePageContext();
-                        if (currentCtx.type || currentCtx.userFull) {
-                            break;
-                        }
-                    }
-                } else {
-                    // Immediate read
-                    this.readFieldsAndUpdate();
-                }
-
-                // Update UI components
-                this.refreshUI();
-            } catch (error) {
-                console.log('[pageState] Error in refreshActivePage:', error);
-            }
-        },
-
-        /**
          * Refresh UI components (ticker and tab title)
          */
         refreshUI() {
-            try {
-                if (AL.tabTitle && AL.tabTitle.update) {
-                    AL.tabTitle.update();
-                }
-            } catch (error) {
-                console.log('[pageState] Error updating tab title:', error);
-            }
-
             try {
                 if (AL.ui && AL.ui.updateTicker) {
                     AL.ui.updateTicker();
                 }
             } catch (error) {
-                console.log('[pageState] Error updating ticker:', error);
+                console.error('[pageState] Error updating ticker:', error);
             }
-        },
-
-        /**
-         * Handle tab switch event (called by tab title monitor)
-         */
-        onTabSwitch() {
-            console.log('[pageState] Tab switch detected, refreshing...');
-            this.refreshActivePage(true);
         }
     };
 
@@ -4237,9 +4321,9 @@
                                 console.log('[tabTitle] Tab switched detected via MutationObserver');
                                 // Reset field monitoring for new page
                                 this._monitoredFields = {};
-                                // Trigger page state's tab switch handler
-                                if (AL.pageState && AL.pageState.onTabSwitch) {
-                                    AL.pageState.onTabSwitch();
+                                // Trigger page state apply (tab switch)
+                                if (AL.pageState && AL.pageState.apply) {
+                                    setTimeout(() => AL.pageState.apply(), 50);
                                 }
                             }
                         }
@@ -4276,10 +4360,10 @@
                     console.log('[tabTitle] Tab click detected');
                     // Reset field monitoring
                     this._monitoredFields = {};
-                    // Trigger page state's tab switch handler after a short delay
+                    // Trigger page state apply after a short delay
                     setTimeout(() => {
-                        if (AL.pageState && AL.pageState.onTabSwitch) {
-                            AL.pageState.onTabSwitch();
+                        if (AL.pageState && AL.pageState.apply) {
+                            AL.pageState.apply();
                         }
                     }, 100);
                 }
@@ -4791,14 +4875,7 @@
                     AL.activeContext.startMonitoring();
                 }
 
-                // Refresh active page to load initial state (delayed and safe)
-                setTimeout(() => {
-                    if (AL.pageState && AL.pageState.refreshActivePage) {
-                        AL.pageState.refreshActivePage().catch(err => {
-                            console.error('[init] Error in refreshActivePage:', err);
-                        });
-                    }
-                }, 500);
+                // Note: pageState.init() already handles initial loading via apply() and setInterval
 
                 console.log('[init] UI initialized successfully');
             } catch (error) {
