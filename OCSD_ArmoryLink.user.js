@@ -1607,12 +1607,14 @@
                 // Get active page context (ensures ticker shows current page's data only)
                 const ctx = AL.pageState && AL.pageState.getActivePageContext ?
                     AL.pageState.getActivePageContext() :
-                    { type: null, userLast: null, vehicle: null, weapon: null, updatedOn: null };
+                    { type: null, userFull: null, vehicle: null, weapon: null, taser: null, patrol: null, updatedOn: null };
 
                 const typeValue = ctx.type || 'N/A';
-                const userValue = ctx.userLast || 'Unknown';
+                const userValue = ctx.userFull || 'Unknown';
                 const vehicleValue = ctx.vehicle || '';
                 const weaponValue = ctx.weapon || '';
+                const taserValue = ctx.taser || '';
+                const patrolValue = ctx.patrol || '';
                 const prefixText = AL.prefixes.activePrefix ? `Prefix: ${AL.prefixes.activePrefix.label} (${AL.prefixes.activeStickyCount})` : '';
 
                 // Determine ticker styling using helper function
@@ -1651,6 +1653,8 @@
                     <span>User: ${userValue}</span>
                     ${vehicleValue ? `<span>Vehicle: ${vehicleValue}</span>` : ''}
                     ${weaponValue ? `<span>Weapon: ${weaponValue}</span>` : ''}
+                    ${taserValue ? `<span>Taser: ${taserValue}</span>` : ''}
+                    ${patrolValue ? `<span>Patrol: ${patrolValue}</span>` : ''}
                     ${prefixText ? `<span style="color: ${prefixColor};">${prefixText}</span>` : ''}
                 `;
             } catch (error) {
