@@ -572,6 +572,8 @@
 
                 // Ticker
                 tickerEnabled: true,
+                tickerHeight: 30,
+                tickerFontSize: 13,
 
                 // Tab visibility
                 visibleTabs: ['dashboard', 'rules', 'fields', 'prefixes', 'macros', 'favorites', 'bwc', 'x10', 'batch', 'history', 'settings', 'debug'],
@@ -1095,19 +1097,19 @@
                 #al-panel.dock-left {
                     left: 0;
                     top: 0;
-                    bottom: 0;
+                    bottom: var(--ticker-height, 30px);
                     width: 400px;
                 }
                 #al-panel.dock-right {
                     right: 0;
                     top: 0;
-                    bottom: 0;
+                    bottom: var(--ticker-height, 30px);
                     width: 400px;
                 }
                 #al-panel.dock-bottom {
                     left: 0;
                     right: 0;
-                    bottom: 0;
+                    bottom: var(--ticker-height, 30px);
                     height: 300px;
                 }
                 #al-panel.float {
@@ -1172,18 +1174,44 @@
                 /* Ticker */
                 #al-ticker {
                     position: fixed;
-                    top: 0;
+                    bottom: 0;
                     left: 0;
                     right: 0;
                     background: #2a2a2a;
                     color: #e0e0e0;
-                    padding: 6px 12px;
-                    font-size: 12px;
-                    z-index: 999998;
-                    border-bottom: 1px solid #444;
+                    padding: var(--ticker-padding, 8px 12px);
+                    font-size: var(--ticker-font-size, 13px);
+                    height: var(--ticker-height, 30px);
+                    box-sizing: border-box;
+                    z-index: 1000000;
+                    border-top: 1px solid #444;
                     display: flex;
-                    justify-content: space-between;
+                    justify-content: flex-start;
                     align-items: center;
+                    gap: 20px;
+                }
+
+                .al-ticker-status-dot {
+                    width: 12px;
+                    height: 12px;
+                    border-radius: 50%;
+                    display: inline-block;
+                    margin-right: 8px;
+                }
+
+                .al-ticker-status-dot.mode-on {
+                    background: #4CAF50;
+                    box-shadow: 0 0 8px #4CAF50;
+                }
+
+                .al-ticker-status-dot.mode-standby {
+                    background: #ff9800;
+                    box-shadow: 0 0 8px #ff9800;
+                }
+
+                .al-ticker-status-dot.mode-off {
+                    background: #f44336;
+                    box-shadow: 0 0 8px #f44336;
                 }
 
                 /* Toast */
@@ -1432,9 +1460,24 @@
 
             this.ticker = document.createElement('div');
             this.ticker.id = 'al-ticker';
+
+            // Apply CSS variables for ticker size
+            const tickerHeight = settings.tickerHeight || 30;
+            const tickerFontSize = settings.tickerFontSize || 13;
+            document.documentElement.style.setProperty('--ticker-height', `${tickerHeight}px`);
+            document.documentElement.style.setProperty('--ticker-font-size', `${tickerFontSize}px`);
+            document.documentElement.style.setProperty('--ticker-padding', `${Math.floor(tickerHeight / 4)}px 12px`);
+
             document.body.appendChild(this.ticker);
 
             this.updateTicker();
+
+            // Start auto-update interval (every 2 seconds)
+            if (!this._tickerInterval) {
+                this._tickerInterval = setInterval(() => {
+                    this.updateTicker();
+                }, 2000);
+            }
         },
 
         /**
@@ -1443,15 +1486,16 @@
         updateTicker() {
             if (!this.ticker) return;
 
-            const mode = AL.capture.getModeLabel();
-            const leader = AL.broadcast.isLeader ? 'Leader' : 'Follower';
+            // Get mode and determine dot class
+            const mode = AL.capture.mode;
+            const modeDotClass = `mode-${mode}`;
+
             const typeValue = AL.fields.getFieldValue('type') || 'N/A';
             const userValue = AL.fields.getFieldValue('user') || 'N/A';
             const prefixText = AL.prefixes.activePrefix ? `Prefix: ${AL.prefixes.activePrefix.label} (${AL.prefixes.activeStickyCount})` : '';
 
             this.ticker.innerHTML = `
-                <span>Mode: ${mode}</span>
-                <span>Role: ${leader}</span>
+                <span style="display: flex; align-items: center;"><span class="al-ticker-status-dot ${modeDotClass}"></span></span>
                 <span>Type: ${typeValue}</span>
                 <span>User: ${userValue}</span>
                 ${prefixText ? `<span style="color: #ff9800;">${prefixText}</span>` : ''}
@@ -2170,6 +2214,18 @@
                             <label for="al-setting-ticker-enabled" style="margin: 0;">Show Ticker Bar</label>
                         </div>
                     </div>
+
+                    <div class="al-form-group">
+                        <label>Ticker Height (px)</label>
+                        <input type="number" class="al-input" id="al-setting-ticker-height" value="${settings.tickerHeight || 30}" min="20" max="60" step="5">
+                        <small>Height of the ticker bar at bottom of screen</small>
+                    </div>
+
+                    <div class="al-form-group">
+                        <label>Ticker Font Size (px)</label>
+                        <input type="number" class="al-input" id="al-setting-ticker-font-size" value="${settings.tickerFontSize || 13}" min="10" max="20" step="1">
+                        <small>Font size for ticker text</small>
+                    </div>
                 </div>
 
                 <!-- Debug Settings -->
@@ -2227,6 +2283,8 @@
 
             // Ticker settings - auto-save on change
             document.getElementById('al-setting-ticker-enabled').onchange = autoSave;
+            document.getElementById('al-setting-ticker-height').onchange = autoSave;
+            document.getElementById('al-setting-ticker-font-size').onchange = autoSave;
 
             // Debug settings - auto-save on change
             document.getElementById('al-setting-debug-enabled').onchange = autoSave;
@@ -2289,6 +2347,8 @@
 
                 // Ticker
                 tickerEnabled: document.getElementById('al-setting-ticker-enabled').checked,
+                tickerHeight: parseInt(document.getElementById('al-setting-ticker-height').value) || 30,
+                tickerFontSize: parseInt(document.getElementById('al-setting-ticker-font-size').value) || 13,
 
                 // Tab visibility
                 visibleTabs: ['dashboard', 'rules', 'fields', 'prefixes', 'macros', 'favorites', 'bwc', 'x10', 'batch', 'history', 'settings', 'debug'],
@@ -2314,12 +2374,17 @@
                 this.panel.className = settings.dockMode;
             }
 
-            // Apply ticker visibility
+            // Apply ticker settings
             if (settings.tickerEnabled && !this.ticker) {
                 this.createTicker();
             } else if (!settings.tickerEnabled && this.ticker) {
                 this.ticker.remove();
                 this.ticker = null;
+            } else if (settings.tickerEnabled && this.ticker) {
+                // Update CSS variables for ticker size
+                document.documentElement.style.setProperty('--ticker-height', `${settings.tickerHeight}px`);
+                document.documentElement.style.setProperty('--ticker-font-size', `${settings.tickerFontSize}px`);
+                document.documentElement.style.setProperty('--ticker-padding', `${Math.floor(settings.tickerHeight / 4)}px 12px`);
             }
         },
 
@@ -3611,13 +3676,22 @@
          * Start monitoring field changes for automatic updates
          */
         startMonitoring() {
+            // Track which fields have been attached
+            this._monitoredFields = {};
+
             // Monitor Type and User fields for changes
             const monitorField = (fieldKey) => {
+                // Skip if already monitoring this field
+                if (this._monitoredFields[fieldKey]) return true;
+
                 const field = AL.fields.getField(fieldKey);
-                if (!field) return;
+                if (!field) return false;
 
                 const element = AL.utils.findElement(field.selector, field.selectorPath);
-                if (!element) return;
+                if (!element) {
+                    console.log(`[tabTitle] Field ${fieldKey} element not found yet, will retry...`);
+                    return false;
+                }
 
                 // For Type field (combobox in shadow DOM), monitor the button text changes
                 if (fieldKey === 'type' && element.getAttribute('role') === 'combobox') {
@@ -3637,7 +3711,8 @@
                     });
 
                     console.log('[tabTitle] Monitoring Type field for changes');
-                    return;
+                    this._monitoredFields[fieldKey] = true;
+                    return true;
                 }
 
                 // For regular input fields, listen to change and input events
@@ -3659,12 +3734,28 @@
                     });
 
                     console.log(`[tabTitle] Monitoring ${fieldKey} field for changes`);
+                    this._monitoredFields[fieldKey] = true;
+                    return true;
                 }
+
+                return false;
             };
 
-            // Monitor key fields
+            // Try to monitor fields immediately
             monitorField('type');
             monitorField('user');
+
+            // Set up retry mechanism for fields that weren't found (every 2 seconds)
+            const retryInterval = setInterval(() => {
+                const typeAttached = monitorField('type');
+                const userAttached = monitorField('user');
+
+                // If both fields are attached, stop retrying
+                if (typeAttached && userAttached) {
+                    clearInterval(retryInterval);
+                    console.log('[tabTitle] All fields monitored successfully');
+                }
+            }, 2000);
 
             // Also set up a periodic update every 2 seconds as a backup
             setInterval(() => {
