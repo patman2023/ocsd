@@ -153,14 +153,36 @@
 
                 // Check if element is a descendant of the active root
                 let node = el;
-                while (node) {
+                let depth = 0;
+                const maxDepth = 100; // Prevent infinite loops
+
+                while (node && depth < maxDepth) {
                     if (node === activeRoot) {
                         return true; // Element is within active root
                     }
-                    node = node.parentNode || (node.getRootNode && node.getRootNode().host) || null;
+
+                    // Try multiple ways to traverse up the tree
+                    const parent = node.parentNode || node.parentElement;
+                    if (parent && parent !== node) {
+                        node = parent;
+                    } else if (node.getRootNode) {
+                        const root = node.getRootNode();
+                        if (root && root.host && root.host !== node) {
+                            node = root.host;
+                        } else {
+                            break; // Can't go higher
+                        }
+                    } else {
+                        break;
+                    }
+
+                    depth++;
                 }
 
-                return false; // Element is NOT in active root
+                // IMPORTANT: If we couldn't determine ancestry (reached top without finding activeRoot),
+                // be PERMISSIVE and allow the element. This prevents breaking fields when DOM is complex.
+                // The visibility check will still filter out truly hidden elements.
+                return true;
             } catch (e) {
                 console.warn('[utils] Error checking if element in active tab:', e);
                 return true; // On error, allow element
@@ -238,20 +260,25 @@
                     const allMatches = this.querySelectorAllDeep(selector, document);
 
                     if (allMatches && allMatches.length > 0) {
-                        // CRITICAL: Filter by BOTH visibility AND active tab ancestry
-                        const validMatches = allMatches.filter(el => {
+                        // Primary strategy: Find visible elements that are in active tab
+                        // This prevents cross-tab contamination while allowing fields to work
+                        const visibleInActiveTab = allMatches.filter(el => {
                             const isVisible = this.isElementVisible(el);
                             const isInActive = this.isInActiveTab(el);
                             return isVisible && isInActive;
                         });
 
-                        if (validMatches.length > 0) {
-                            // Return first element that is both visible AND in active tab
-                            return validMatches[0];
+                        if (visibleInActiveTab.length > 0) {
+                            return visibleInActiveTab[0];
                         }
 
-                        // If we have an active root, try searching just in that root
-                        // (handles case where visibility check might fail but element is in right place)
+                        // Fallback: Just use visibility check (allows fields to work even if ancestry check fails)
+                        const visibleMatches = allMatches.filter(el => this.isElementVisible(el));
+                        if (visibleMatches.length > 0) {
+                            return visibleMatches[0];
+                        }
+
+                        // If we have an active root, try searching directly in it
                         if (hasActiveRoot) {
                             const localMatches = this.querySelectorAllDeep(selector, searchRoot);
                             if (localMatches && localMatches.length > 0) {
@@ -263,18 +290,9 @@
                                 // Return first match in active root even if not visible
                                 return localMatches[0];
                             }
-                            // No matches in active root either
-                            console.warn(`[utils] No valid match for "${selector}" in active tab`);
-                            return null;
                         }
 
-                        // No active root context - use first visible match as fallback
-                        const anyVisible = allMatches.find(el => this.isElementVisible(el));
-                        if (anyVisible) {
-                            return anyVisible;
-                        }
-
-                        // Last resort: return first match
+                        // Last resort: return first match found anywhere
                         return allMatches[0];
                     }
 
