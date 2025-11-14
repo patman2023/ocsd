@@ -1728,69 +1728,102 @@
         },
 
         /**
-         * Update ticker
+         * Compute ticker state object from context (for change detection)
+         */
+        computeTickerState(ctx) {
+            const mode = AL.capture ? AL.capture.mode : 'off';
+            const prefixLabel = AL.prefixes && AL.prefixes.activePrefix ?
+                `${AL.prefixes.activePrefix.label} (${AL.prefixes.activeStickyCount})` : '';
+
+            // Determine ticker style/color
+            let tickerStyle = 'default';
+            if (AL.pageState && AL.pageState.deriveTickerStyle) {
+                tickerStyle = AL.pageState.deriveTickerStyle(ctx);
+            } else if (AL.pageState && AL.pageState.isRecordUpdated && AL.pageState.isRecordUpdated(ctx.updatedOn)) {
+                tickerStyle = 'updated';
+            } else if (ctx.type && ctx.type.toLowerCase().includes('deploy')) {
+                tickerStyle = 'deploy';
+            } else if (ctx.type && ctx.type.toLowerCase().includes('return')) {
+                tickerStyle = 'return';
+            }
+
+            return {
+                mode,
+                user: ctx.userFull || 'Unknown',
+                vehicle: ctx.vehicle || '',
+                weapon: ctx.weapon || '',
+                taser: ctx.taser || '',
+                patrol: ctx.patrol || '',
+                prefix: prefixLabel,
+                tickerStyle
+            };
+        },
+
+        /**
+         * Update ticker (with change detection)
          */
         updateTicker() {
             if (!this.ticker) return;
 
             try {
-                // Get mode and determine dot class
-                const mode = AL.capture.mode;
-                const modeDotClass = `mode-${mode}`;
+                const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
+                const debugMode = settings.debugEnabled || false;
 
-                // Get active page context (ensures ticker shows current page's data only)
+                // Get active page context
                 const ctx = AL.pageState && AL.pageState.getActivePageContext ?
                     AL.pageState.getActivePageContext() :
-                    { type: null, userFull: null, userLast: null, vehicle: null, weapon: null, taser: null, patrol: null, updatedOn: null };
+                    { type: null, userFull: null, vehicle: null, weapon: null, taser: null, patrol: null, updatedOn: null };
 
-                // Get asset field values (Type is NOT displayed as text, only as color)
-                const userValue = ctx.userFull || 'Unknown';
-                const vehicleValue = ctx.vehicle || '';
-                const weaponValue = ctx.weapon || '';
-                const taserValue = ctx.taser || '';
-                const patrolValue = ctx.patrol || '';
-                const prefixText = AL.prefixes.activePrefix ? `Prefix: ${AL.prefixes.activePrefix.label} (${AL.prefixes.activeStickyCount})` : '';
+                // Compute new ticker state
+                const newState = this.computeTickerState(ctx);
 
-                // Determine ticker styling using helper function (Type determines background color only)
-                const tickerStyle = AL.pageState && AL.pageState.deriveTickerStyle ?
-                    AL.pageState.deriveTickerStyle(ctx) :
-                    'default';
-
-                let bgColor = '#2a2a2a';  // default
-                let textColor = '#e0e0e0'; // default
-                let prefixColor = '#ff9800'; // default orange
-
-                if (tickerStyle === 'updated') {
-                    // Priority 1: Record updated (Updated On has value)
-                    bgColor = '#f44336';  // red
-                    textColor = '#ffffff'; // white
-                    prefixColor = '#ffd700'; // gold for better visibility on red
-                } else if (tickerStyle === 'deploy') {
-                    // Priority 2: Type is Deploy/Deployment
-                    bgColor = '#ffeb3b';  // yellow
-                    textColor = '#000000'; // black
-                    prefixColor = '#ff6f00'; // dark orange for visibility on yellow
-                } else if (tickerStyle === 'return') {
-                    // Priority 3: Type is Return
-                    bgColor = '#4CAF50';  // green
-                    textColor = '#000000'; // black
-                    prefixColor = '#1b5e20'; // dark green for visibility
+                // Change detection: compare with last rendered state
+                if (ctx.lastTickerState) {
+                    const changed = Object.keys(newState).some(key => newState[key] !== ctx.lastTickerState[key]);
+                    if (!changed) {
+                        return; // No change, skip DOM update
+                    }
                 }
 
-                // Apply styling to ticker
+                // Determine colors based on ticker style
+                let bgColor = '#2a2a2a';
+                let textColor = '#e0e0e0';
+                let prefixColor = '#ff9800';
+
+                if (newState.tickerStyle === 'updated') {
+                    bgColor = '#f44336';  // red
+                    textColor = '#ffffff';
+                    prefixColor = '#ffd700';
+                } else if (newState.tickerStyle === 'deploy') {
+                    bgColor = '#ffeb3b';  // yellow
+                    textColor = '#000000';
+                    prefixColor = '#ff6f00';
+                } else if (newState.tickerStyle === 'return') {
+                    bgColor = '#4CAF50';  // green
+                    textColor = '#000000';
+                    prefixColor = '#1b5e20';
+                }
+
+                // Apply styling
                 this.ticker.style.backgroundColor = bgColor;
                 this.ticker.style.color = textColor;
 
-                // Build ticker content with asset fields only (NO Type text)
+                // Build ticker HTML (Type shown as color only, NOT text)
+                const modeDotClass = `mode-${newState.mode}`;
                 this.ticker.innerHTML = `
                     <span style="display: flex; align-items: center;"><span class="al-ticker-status-dot ${modeDotClass}"></span></span>
-                    <span>USER: ${userValue}</span>
-                    ${vehicleValue ? `<span>VEH: ${vehicleValue}</span>` : ''}
-                    ${weaponValue ? `<span>WPN: ${weaponValue}</span>` : ''}
-                    ${taserValue ? `<span>TASER: ${taserValue}</span>` : ''}
-                    ${patrolValue ? `<span>PATROL: ${patrolValue}</span>` : ''}
-                    ${prefixText ? `<span style="color: ${prefixColor};">${prefixText}</span>` : ''}
+                    <span>USER: ${newState.user}</span>
+                    ${newState.vehicle ? `<span>VEH: ${newState.vehicle}</span>` : ''}
+                    ${newState.weapon ? `<span>WPN: ${newState.weapon}</span>` : ''}
+                    ${newState.taser ? `<span>TASER: ${newState.taser}</span>` : ''}
+                    ${newState.patrol ? `<span>PATROL: ${newState.patrol}</span>` : ''}
+                    ${newState.prefix ? `<span style="color: ${prefixColor};">Prefix: ${newState.prefix}</span>` : ''}
                 `;
+
+                // Store last rendered state
+                ctx.lastTickerState = newState;
+
+                if (debugMode) console.log('[ui] Ticker updated:', newState);
             } catch (error) {
                 console.error('[ui] Error updating ticker:', error);
             }
@@ -4025,7 +4058,13 @@
                     patrol: null,
                     controlOneRadio: null,
                     comments: null,
-                    updatedOn: null
+                    updatedOn: null,
+                    // Cached rendering state (for change detection)
+                    lastTabLabel: null,
+                    lastTickerState: null,
+                    // Cached DOM references (for performance)
+                    cachedTabElement: null,
+                    cachedTabLabelElement: null
                 };
                 console.log('[pageState] Created new context for page:', pageId);
             }
@@ -4228,21 +4267,18 @@
         // ServiceNow workspace tab label formatting (TYPE_ICON | LASTNAME)
         originalTitle: null,
         originalTooltip: null,
-        typeIcons: {
-            'Deployment': '🟡',  // Yellow dot for Deployment
-            'Return': '🟢',      // Green dot for Return
-            'default': '⚫'      // Black dot for unknown
-        },
+        tabSwitchObserver: null,
+        fieldMonitoringSetup: false,
+        debugMode: false,
 
         init() {
-            // Store original tab label text
-            const tabLabel = this.getTabLabelElement();
-            if (tabLabel) {
-                this.originalTitle = tabLabel.textContent;
-                this.originalTooltip = tabLabel.getAttribute('data-tooltip');
-            }
-            this.update();
+            const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
+            this.debugMode = settings.debugEnabled || false;
+
+            // Setup monitoring once
             this.startMonitoring();
+            // Initial update
+            this.update();
             console.log('[tabTitle] Initialized');
         },
 
@@ -4250,132 +4286,103 @@
          * Start monitoring field changes for automatic updates
          */
         startMonitoring() {
-            // Track which fields have been attached
-            this._monitoredFields = {};
+            if (this.fieldMonitoringSetup) return;
 
-            // Monitor Type and User fields for changes
-            const monitorField = (fieldKey) => {
-                // Skip if already monitoring this field
-                if (this._monitoredFields[fieldKey]) return true;
+            // Debounced refresh function (200ms delay)
+            const debouncedRefresh = AL.utils.debounce(() => {
+                AL.pageState.readFieldsAndUpdate();
+                AL.pageState.refreshUI();
+            }, 200);
 
-                const field = AL.fields.getField(fieldKey);
-                if (!field) return false;
+            // Setup field monitoring once with bounded retry
+            let retryCount = 0;
+            const maxRetries = 5;
 
-                const element = AL.utils.findElement(field.selector, field.selectorPath);
-                if (!element) {
-                    console.log(`[tabTitle] Field ${fieldKey} element not found yet, will retry...`);
+            const setupFieldMonitors = () => {
+                const typeField = AL.fields.getField('type');
+                const userField = AL.fields.getField('user');
+
+                if (!typeField || !userField) {
+                    if (retryCount < maxRetries) {
+                        retryCount++;
+                        if (this.debugMode) console.log(`[tabTitle] Fields not ready, retry ${retryCount}/${maxRetries}`);
+                        return false;
+                    }
+                    console.warn('[tabTitle] Fields not found after max retries');
                     return false;
                 }
 
-                // For Type field (combobox in shadow DOM), monitor the button text changes
-                if (fieldKey === 'type' && element.getAttribute('role') === 'combobox') {
-                    // Create a MutationObserver to watch for text changes in the combobox
-                    const observer = new MutationObserver(() => {
-                        console.log('[tabTitle] Type field changed, updating...');
-                        this.update();
-                        if (AL.ui && AL.ui.updateTicker) {
-                            AL.ui.updateTicker();
-                        }
-                    });
+                const typeElement = AL.utils.findElement(typeField.selector, typeField.selectorPath);
+                const userElement = AL.utils.findElement(userField.selector, userField.selectorPath);
 
-                    observer.observe(element, {
+                if (!typeElement && !userElement) {
+                    if (retryCount < maxRetries) {
+                        retryCount++;
+                        if (this.debugMode) console.log(`[tabTitle] Field elements not found, retry ${retryCount}/${maxRetries}`);
+                        return false;
+                    }
+                    console.warn('[tabTitle] Field elements not found after max retries');
+                    return false;
+                }
+
+                // Monitor Type field (combobox in shadow DOM)
+                if (typeElement && typeElement.getAttribute('role') === 'combobox') {
+                    const observer = new MutationObserver(debouncedRefresh);
+                    observer.observe(typeElement, {
                         childList: true,
                         subtree: true,
                         characterData: true
                     });
-
-                    console.log('[tabTitle] Monitoring Type field for changes');
-                    this._monitoredFields[fieldKey] = true;
-                    return true;
+                    if (this.debugMode) console.log('[tabTitle] Type field monitoring active');
                 }
 
-                // For regular input fields, listen to change and input events
-                if (element.tagName === 'INPUT' || element.tagName === 'SELECT' || element.tagName === 'TEXTAREA') {
-                    element.addEventListener('change', () => {
-                        console.log(`[tabTitle] ${fieldKey} field changed, updating...`);
-                        this.update();
-                        if (AL.ui && AL.ui.updateTicker) {
-                            AL.ui.updateTicker();
-                        }
-                    });
-
-                    element.addEventListener('input', () => {
-                        console.log(`[tabTitle] ${fieldKey} field input, updating...`);
-                        this.update();
-                        if (AL.ui && AL.ui.updateTicker) {
-                            AL.ui.updateTicker();
-                        }
-                    });
-
-                    console.log(`[tabTitle] Monitoring ${fieldKey} field for changes`);
-                    this._monitoredFields[fieldKey] = true;
-                    return true;
+                // Monitor User field
+                if (userElement) {
+                    userElement.addEventListener('change', debouncedRefresh);
+                    userElement.addEventListener('input', debouncedRefresh);
+                    if (this.debugMode) console.log('[tabTitle] User field monitoring active');
                 }
 
-                return false;
+                this.fieldMonitoringSetup = true;
+                console.log('[tabTitle] Field monitoring started');
+                return true;
             };
 
-            // Try to monitor fields immediately
-            monitorField('type');
-            monitorField('user');
-
-            // Set up retry mechanism for fields that weren't found (every 2 seconds)
-            const retryInterval = setInterval(() => {
-                const typeAttached = monitorField('type');
-                const userAttached = monitorField('user');
-
-                // If both fields are attached, stop retrying
-                if (typeAttached && userAttached) {
-                    clearInterval(retryInterval);
-                    console.log('[tabTitle] All fields monitored successfully');
-                }
-            }, 2000);
+            // Try immediately
+            if (!setupFieldMonitors()) {
+                // Retry with delays
+                const retryInterval = setInterval(() => {
+                    if (setupFieldMonitors()) {
+                        clearInterval(retryInterval);
+                    } else if (retryCount >= maxRetries) {
+                        clearInterval(retryInterval);
+                    }
+                }, 1000);
+            }
 
             // Monitor for tab switches in ServiceNow workspace
             this.monitorTabSwitches();
-
-            // Also set up a periodic update every 2 seconds as a backup
-            setInterval(() => {
-                this.update();
-                if (AL.ui && AL.ui.updateTicker) {
-                    AL.ui.updateTicker();
-                }
-            }, 2000);
-
-            console.log('[tabTitle] Field monitoring started');
         },
 
         /**
          * Monitor ServiceNow workspace tab switches
          */
         monitorTabSwitches() {
-            // Find the tab container
-            const findTabContainer = () => {
-                return AL.utils.querySelectorDeep('.sn-chrome-tabs-group') ||
-                       AL.utils.querySelectorDeep('[role="tablist"]') ||
-                       document.querySelector('.sn-chrome-tabs-group') ||
-                       document.querySelector('[role="tablist"]');
-            };
+            if (this.tabSwitchObserver) return; // Already setup
 
-            const setupTabObserver = () => {
-                const tabContainer = findTabContainer();
-                if (!tabContainer) {
-                    console.log('[tabTitle] Tab container not found, will retry...');
-                    return false;
-                }
+            const tabContainer = AL.utils.querySelectorDeep('.sn-chrome-tabs-group') ||
+                                AL.utils.querySelectorDeep('[role="tablist"]');
 
-                console.log('[tabTitle] Found tab container, setting up observer');
-
+            if (!tabContainer) {
+                if (this.debugMode) console.log('[tabTitle] Tab container not found, will setup on first tab click');
+            } else {
                 // Watch for attribute changes on tab elements (class changes for is-selected)
-                const tabObserver = new MutationObserver((mutations) => {
+                this.tabSwitchObserver = new MutationObserver((mutations) => {
                     for (const mutation of mutations) {
                         if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
                             const target = mutation.target;
-                            // Check if this tab just became selected
                             if (target.classList && target.classList.contains('is-selected')) {
-                                console.log('[tabTitle] Tab switched detected via MutationObserver');
-                                // Reset field monitoring for new page
-                                this._monitoredFields = {};
+                                if (this.debugMode) console.log('[tabTitle] Tab switch detected');
                                 // Trigger page state's tab switch handler
                                 if (AL.pageState && AL.pageState.onTabSwitch) {
                                     AL.pageState.onTabSwitch();
@@ -4385,37 +4392,20 @@
                     }
                 });
 
-                // Observe all tabs in the container
-                tabObserver.observe(tabContainer, {
+                this.tabSwitchObserver.observe(tabContainer, {
                     attributes: true,
                     attributeFilter: ['class', 'aria-selected'],
                     subtree: true
                 });
 
-                console.log('[tabTitle] Tab switch monitoring active');
-                return true;
-            };
-
-            // Try to setup immediately
-            if (!setupTabObserver()) {
-                // Retry every 2 seconds if not found
-                const retryInterval = setInterval(() => {
-                    if (setupTabObserver()) {
-                        clearInterval(retryInterval);
-                    }
-                }, 2000);
+                if (this.debugMode) console.log('[tabTitle] Tab switch monitoring active');
             }
 
-            // Also listen for clicks on tabs as a backup
+            // Listen for clicks on tabs as backup
             document.addEventListener('click', (e) => {
-                const target = e.target;
-                // Check if clicked element is or is within a tab
-                const tab = target.closest('.sn-chrome-one-tab') || target.closest('[role="tab"]');
+                const tab = e.target.closest('.sn-chrome-one-tab') || e.target.closest('[role="tab"]');
                 if (tab) {
-                    console.log('[tabTitle] Tab click detected');
-                    // Reset field monitoring
-                    this._monitoredFields = {};
-                    // Trigger page state's tab switch handler after a short delay
+                    if (this.debugMode) console.log('[tabTitle] Tab click detected');
                     setTimeout(() => {
                         if (AL.pageState && AL.pageState.onTabSwitch) {
                             AL.pageState.onTabSwitch();
@@ -4426,56 +4416,80 @@
         },
 
         /**
-         * Get ServiceNow workspace tab label element
+         * Get ServiceNow workspace tab label element (with caching per page)
          */
         getTabLabelElement() {
-            // Try to find the SELECTED/ACTIVE tab label in ServiceNow Workspace
-            // The selected tab has class "is-selected"
+            const pageId = AL.pageState.activePageId || AL.pageState.computePageId();
+            const ctx = AL.pageState.getOrCreatePageContext(pageId);
+
+            // Check cache first
+            if (ctx.cachedTabLabelElement) {
+                // Verify it's still in the DOM
+                if (document.contains(ctx.cachedTabLabelElement)) {
+                    return ctx.cachedTabLabelElement;
+                }
+                // Clear stale cache
+                ctx.cachedTabLabelElement = null;
+            }
+
+            // Find the selected tab label
             let tabLabel = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected .sn-chrome-one-tab-label');
 
-            // Fallback: try to find tab with aria-selected="true"
             if (!tabLabel) {
                 tabLabel = AL.utils.querySelectorDeep('[aria-selected="true"] .sn-chrome-one-tab-label');
             }
 
-            // Fallback: try to find focused tab
             if (!tabLabel) {
                 tabLabel = AL.utils.querySelectorDeep('.sn-chrome-one-tab.focused .sn-chrome-one-tab-label');
             }
 
-            // Last resort: try standard query selector for selected tab
-            if (!tabLabel) {
-                tabLabel = document.querySelector('.sn-chrome-one-tab.is-selected .sn-chrome-one-tab-label');
+            // Cache it
+            if (tabLabel) {
+                ctx.cachedTabLabelElement = tabLabel;
             }
 
             return tabLabel;
         },
 
         /**
-         * Update ServiceNow workspace tab label
+         * Compute tab label string from context
+         */
+        computeTabLabel(ctx) {
+            const icon = ctx.typeIcon || '⚫';
+            const lastName = (ctx.userLast || 'Unknown').toUpperCase();
+            return `${icon} | ${lastName}`;
+        },
+
+        /**
+         * Update ServiceNow workspace tab label (with change detection)
          */
         update() {
-            const tabLabel = this.getTabLabelElement();
-            if (!tabLabel) {
-                console.log('[tabTitle] Could not find ServiceNow tab label element');
-                return;
+            try {
+                const ctx = AL.pageState.getActivePageContext();
+                const newLabel = this.computeTabLabel(ctx);
+
+                // Change detection: only update if label actually changed
+                if (ctx.lastTabLabel === newLabel) {
+                    return; // No change, skip DOM update
+                }
+
+                const tabLabel = this.getTabLabelElement();
+                if (!tabLabel) {
+                    if (this.debugMode) console.log('[tabTitle] Tab label element not found');
+                    return;
+                }
+
+                // Update DOM
+                tabLabel.textContent = newLabel;
+                tabLabel.setAttribute('data-tooltip', newLabel);
+
+                // Store last rendered state
+                ctx.lastTabLabel = newLabel;
+
+                if (this.debugMode) console.log('[tabTitle] Updated tab label to:', newLabel);
+            } catch (error) {
+                console.error('[tabTitle] Error updating tab label:', error);
             }
-
-            // Get active page context
-            const ctx = AL.pageState.getActivePageContext();
-
-            // Format title using context: ICON | LASTNAME
-            const icon = ctx.typeIcon || '⚫';
-            const lastName = ctx.userLast || 'Unknown';
-            const newTitle = `${icon} | ${lastName}`;
-
-            // Update the tab label text
-            tabLabel.textContent = newTitle;
-
-            // Update the tooltip as well
-            tabLabel.setAttribute('data-tooltip', newTitle);
-
-            console.log('[tabTitle] Updated tab label to:', newTitle);
         },
 
         /**
