@@ -394,6 +394,136 @@
                         }
                     ],
                     speechLabel: 'PID'
+                },
+                {
+                    id: AL.utils.generateId(),
+                    name: 'Badge Number (Simple)',
+                    enabled: false,
+                    pattern: '^(\\d{4,6})$',
+                    patternType: 'regex',
+                    useDirective: false,
+                    directiveChars: [],
+                    groupIndexes: [1],
+                    actions: [
+                        {
+                            type: 'setField',
+                            field: 'user',
+                            value: '${group1}'
+                        }
+                    ],
+                    speechLabel: 'Badge'
+                },
+                {
+                    id: AL.utils.generateId(),
+                    name: 'Weapon Serial',
+                    enabled: false,
+                    pattern: '^WPN-([A-Z0-9]+)$',
+                    patternType: 'regex',
+                    useDirective: false,
+                    directiveChars: [],
+                    groupIndexes: [1],
+                    actions: [
+                        {
+                            type: 'setField',
+                            field: 'weapon',
+                            value: '${group1}'
+                        },
+                        {
+                            type: 'speech',
+                            text: 'Weapon ${last4}'
+                        }
+                    ],
+                    speechLabel: 'Weapon'
+                },
+                {
+                    id: AL.utils.generateId(),
+                    name: 'Taser Serial',
+                    enabled: false,
+                    pattern: '^(TSR|TASER)-([A-Z0-9]+)$',
+                    patternType: 'regex',
+                    useDirective: false,
+                    directiveChars: [],
+                    groupIndexes: [2],
+                    actions: [
+                        {
+                            type: 'setField',
+                            field: 'taser',
+                            value: '${group2}'
+                        },
+                        {
+                            type: 'speech',
+                            text: 'Taser ${last4}'
+                        }
+                    ],
+                    speechLabel: 'Taser'
+                },
+                {
+                    id: AL.utils.generateId(),
+                    name: 'Vehicle ID',
+                    enabled: false,
+                    pattern: '^VEH-([A-Z0-9]+)$',
+                    patternType: 'regex',
+                    useDirective: false,
+                    directiveChars: [],
+                    groupIndexes: [1],
+                    actions: [
+                        {
+                            type: 'setField',
+                            field: 'vehicle',
+                            value: '${group1}'
+                        },
+                        {
+                            type: 'speech',
+                            text: 'Vehicle ${group1}'
+                        }
+                    ],
+                    speechLabel: 'Vehicle'
+                },
+                {
+                    id: AL.utils.generateId(),
+                    name: 'Radio Serial',
+                    enabled: false,
+                    pattern: '^(RAD|RADIO)-([A-Z0-9]+)$',
+                    patternType: 'regex',
+                    useDirective: false,
+                    directiveChars: [],
+                    groupIndexes: [2],
+                    actions: [
+                        {
+                            type: 'setField',
+                            field: 'patrol_radio',
+                            value: '${group2}'
+                        },
+                        {
+                            type: 'speech',
+                            text: 'Radio ${last4}'
+                        }
+                    ],
+                    speechLabel: 'Radio'
+                },
+                {
+                    id: AL.utils.generateId(),
+                    name: 'Generic Equipment',
+                    enabled: false,
+                    pattern: '^EQP-([A-Z0-9]+)$',
+                    patternType: 'regex',
+                    useDirective: false,
+                    directiveChars: [],
+                    groupIndexes: [1],
+                    actions: [
+                        {
+                            type: 'setField',
+                            field: 'comments',
+                            value: 'Equipment: ${group1}'
+                        },
+                        {
+                            type: 'toast',
+                            title: 'Equipment',
+                            message: 'Scanned: ${group1}',
+                            level: 'info'
+                        }
+                    ],
+                    speechLabel: 'Equipment'
                 }
             ];
         },
@@ -1140,6 +1270,106 @@
                     font-size: 12px;
                     color: #4CAF50;
                 }
+
+                /* Modal Overlay */
+                .al-modal-overlay {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0,0,0,0.7);
+                    z-index: 1000000;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    animation: al-fade-in 0.2s ease;
+                }
+
+                /* Modal Dialog */
+                .al-modal {
+                    background: #1e1e1e;
+                    color: #e0e0e0;
+                    border-radius: 8px;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+                    max-width: 600px;
+                    width: 90%;
+                    max-height: 90vh;
+                    display: flex;
+                    flex-direction: column;
+                    animation: al-modal-in 0.3s ease;
+                }
+
+                .al-modal-header {
+                    background: #2a2a2a;
+                    padding: 15px 20px;
+                    border-bottom: 1px solid #444;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+
+                .al-modal-header h3 {
+                    margin: 0;
+                    font-size: 16px;
+                }
+
+                .al-modal-body {
+                    padding: 20px;
+                    overflow-y: auto;
+                    flex: 1;
+                }
+
+                .al-modal-footer {
+                    background: #2a2a2a;
+                    padding: 15px 20px;
+                    border-top: 1px solid #444;
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: 10px;
+                }
+
+                .al-form-group {
+                    margin-bottom: 15px;
+                }
+
+                .al-form-group label {
+                    display: block;
+                    margin-bottom: 5px;
+                    font-weight: 500;
+                    font-size: 13px;
+                }
+
+                .al-form-group small {
+                    display: block;
+                    color: #999;
+                    font-size: 11px;
+                    margin-top: 3px;
+                }
+
+                .al-checkbox-group {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+
+                .al-action-item {
+                    background: #2a2a2a;
+                    padding: 10px;
+                    margin-bottom: 8px;
+                    border-radius: 4px;
+                    border-left: 3px solid #4CAF50;
+                }
+
+                @keyframes al-fade-in {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+
+                @keyframes al-modal-in {
+                    from { opacity: 0; transform: scale(0.9); }
+                    to { opacity: 1; transform: scale(1); }
+                }
             `);
         },
 
@@ -1300,6 +1530,14 @@
 
                 case 'rules':
                     this.renderRules(content);
+                    break;
+
+                case 'prefixes':
+                    this.renderPrefixes(content);
+                    break;
+
+                case 'settings':
+                    this.renderSettings(content);
                     break;
 
                 default:
@@ -1618,8 +1856,8 @@
                     const rule = AL.rules.rules.find(r => r.id === el.dataset.id);
                     if (!rule) return;
 
-                    AL.ui.showToast('Not Implemented', 'Rule editing UI coming in next phase', 'info');
-                    // TODO: Implement rule editor modal/form
+                    AL.ui._modalActions = [...(rule.actions || [])];
+                    AL.ui.showRuleEditor(rule);
                 };
             });
 
@@ -1662,8 +1900,8 @@
 
             // Event listeners - Add Rule
             document.getElementById('al_rules_add').onclick = () => {
-                AL.ui.showToast('Not Implemented', 'Add rule UI coming in next phase', 'info');
-                // TODO: Implement add rule modal/form
+                AL.ui._modalActions = [];
+                AL.ui.showRuleEditor(null);
             };
 
             // Event listeners - Reset Defaults
@@ -1674,6 +1912,827 @@
                     AL.ui.showToast('Rules Reset', 'All rules restored to defaults', 'success');
                 }
             };
+        },
+
+        /**
+         * Render Prefixes tab
+         */
+        renderPrefixes(content) {
+            const activePrefix = AL.prefixes.activePrefix;
+
+            content.innerHTML = `
+                <h3>Prefix System (Alt+1-9 Hotkeys)</h3>
+                <p style="margin-bottom: 15px;">Configure text prefixes that can be quickly activated with Alt+1 through Alt+9 hotkeys.</p>
+
+                <!-- Active Prefix Display -->
+                ${activePrefix ? `
+                    <div style="background: #2a2a2a; padding: 12px; margin-bottom: 20px; border-radius: 4px; border-left: 4px solid #4CAF50;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong style="color: #4CAF50;">Active Prefix:</strong> ${activePrefix.label}
+                                <div style="font-size: 11px; color: #999; margin-top: 4px;">Value: "${activePrefix.value}" | Remaining: ${AL.prefixes.activeStickyCount}</div>
+                            </div>
+                            <button class="al-btn al-btn-secondary" id="al_prefix_deactivate">Deactivate</button>
+                        </div>
+                    </div>
+                ` : `
+                    <div style="background: #2a2a2a; padding: 12px; margin-bottom: 20px; border-radius: 4px;">
+                        <div style="color: #999; font-size: 12px;">No active prefix. Press Alt+1-9 to activate.</div>
+                    </div>
+                `}
+
+                <!-- Action Buttons -->
+                <button class="al-btn al-btn-secondary" id="al_prefixes_add" style="margin-bottom: 15px;">Add Prefix</button>
+                <button class="al-btn al-btn-danger" id="al_prefixes_clear">Clear All</button>
+
+                <!-- Prefixes List -->
+                <div id="al_prefixes_list" style="margin-top: 15px;"></div>
+            `;
+
+            // Deactivate button
+            if (activePrefix) {
+                document.getElementById('al_prefix_deactivate').onclick = () => {
+                    AL.prefixes.deactivate();
+                    this.renderPrefixes(content);
+                };
+            }
+
+            // Render prefixes list
+            const prefixesList = document.getElementById('al_prefixes_list');
+
+            if (AL.prefixes.prefixes.length === 0) {
+                prefixesList.innerHTML = '<div style="color: #999; font-size: 12px; padding: 20px; text-align: center;">No prefixes configured. Click "Add Prefix" to create one.</div>';
+            } else {
+                AL.prefixes.prefixes.forEach(prefix => {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'background: #2a2a2a; padding: 12px; margin-bottom: 10px; border-radius: 4px;';
+
+                    const isActive = activePrefix && activePrefix.id === prefix.id;
+
+                    row.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                                    <strong style="font-size: 14px;">${AL.utils.escapeHtml(prefix.label)}</strong>
+                                    ${prefix.hotkey ? `<span style="background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 8px; font-family: monospace;">Alt+${prefix.hotkey}</span>` : ''}
+                                    ${isActive ? `<span style="background: #f59e0b; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 8px;">ACTIVE</span>` : ''}
+                                </div>
+                                <div style="font-family: monospace; font-size: 12px; background: #1e1e1e; padding: 6px 8px; border-radius: 3px; margin-bottom: 4px;">
+                                    "${AL.utils.escapeHtml(prefix.value)}"
+                                </div>
+                                <div style="font-size: 11px; color: #999;">
+                                    Sticky: ${prefix.stickyCount || 1} scan(s)
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <button class="al-btn al-btn-secondary al-prefix-activate" data-id="${prefix.id}" style="font-size: 12px;" ${isActive ? 'disabled' : ''}>Activate</button>
+                            <button class="al-btn al-btn-secondary al-prefix-edit" data-id="${prefix.id}" style="font-size: 12px;">Edit</button>
+                            <button class="al-btn al-btn-danger al-prefix-delete" data-id="${prefix.id}" style="font-size: 12px;">Delete</button>
+                        </div>
+                    `;
+                    prefixesList.appendChild(row);
+                });
+            }
+
+            // Event listeners - Activate
+            document.querySelectorAll('.al-prefix-activate').forEach(el => {
+                el.onclick = () => {
+                    const prefix = AL.prefixes.prefixes.find(p => p.id === el.dataset.id);
+                    if (prefix) {
+                        AL.prefixes.activate(prefix);
+                        this.renderPrefixes(content);
+                    }
+                };
+            });
+
+            // Event listeners - Edit
+            document.querySelectorAll('.al-prefix-edit').forEach(el => {
+                el.onclick = () => {
+                    const prefix = AL.prefixes.prefixes.find(p => p.id === el.dataset.id);
+                    if (prefix) {
+                        this.showPrefixEditor(prefix);
+                    }
+                };
+            });
+
+            // Event listeners - Delete
+            document.querySelectorAll('.al-prefix-delete').forEach(el => {
+                el.onclick = () => {
+                    const prefix = AL.prefixes.prefixes.find(p => p.id === el.dataset.id);
+                    if (!prefix) return;
+
+                    if (confirm(`Delete prefix "${prefix.label}"?`)) {
+                        AL.prefixes.deletePrefix(el.dataset.id);
+                        this.renderPrefixes(content);
+                        this.showToast('Prefix Deleted', `Removed prefix: ${prefix.label}`, 'success');
+                    }
+                };
+            });
+
+            // Event listeners - Add Prefix
+            document.getElementById('al_prefixes_add').onclick = () => {
+                this.showPrefixEditor(null);
+            };
+
+            // Event listeners - Clear All
+            document.getElementById('al_prefixes_clear').onclick = () => {
+                if (confirm('Delete all prefixes?')) {
+                    AL.prefixes.prefixes = [];
+                    AL.prefixes.save();
+                    AL.prefixes.deactivate();
+                    this.renderPrefixes(content);
+                    this.showToast('Prefixes Cleared', 'All prefixes removed', 'success');
+                }
+            };
+        },
+
+        /**
+         * Render Settings tab
+         */
+        renderSettings(content) {
+            const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
+
+            content.innerHTML = `
+                <h3>Settings</h3>
+                <p style="margin-bottom: 20px;">Configure system preferences and behavior.</p>
+
+                <!-- Layout Settings -->
+                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Layout</h4>
+
+                    <div class="al-form-group">
+                        <label>Dock Mode</label>
+                        <select class="al-input" id="al-setting-dock-mode">
+                            <option value="dock-left" ${settings.dockMode === 'dock-left' ? 'selected' : ''}>Dock Left</option>
+                            <option value="dock-right" ${settings.dockMode === 'dock-right' ? 'selected' : ''}>Dock Right</option>
+                            <option value="dock-bottom" ${settings.dockMode === 'dock-bottom' ? 'selected' : ''}>Dock Bottom</option>
+                            <option value="float" ${settings.dockMode === 'float' ? 'selected' : ''}>Float</option>
+                        </select>
+                    </div>
+
+                    <div class="al-form-group">
+                        <label>Panel Width (px)</label>
+                        <input type="number" class="al-input" id="al-setting-panel-width" value="${settings.panelWidth}" min="300" max="800">
+                    </div>
+
+                    <div class="al-form-group">
+                        <label>Panel Height (px)</label>
+                        <input type="number" class="al-input" id="al-setting-panel-height" value="${settings.panelHeight}" min="400" max="1000">
+                    </div>
+                </div>
+
+                <!-- Capture Settings -->
+                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Scanner Capture</h4>
+
+                    <div class="al-form-group">
+                        <label>Scan Throttle (ms)</label>
+                        <input type="number" class="al-input" id="al-setting-scan-throttle" value="${settings.scanThrottle}" min="50" max="1000" step="50">
+                        <small>Minimum time between processing scans (prevents duplicates)</small>
+                    </div>
+
+                    <div class="al-form-group">
+                        <label>Duplicate Window (ms)</label>
+                        <input type="number" class="al-input" id="al-setting-duplicate-window" value="${settings.duplicateWindow}" min="1000" max="30000" step="1000">
+                        <small>Time window to suppress identical scans</small>
+                    </div>
+
+                    <div class="al-form-group">
+                        <label>Scan Timeout (ms)</label>
+                        <input type="number" class="al-input" id="al-setting-scan-timeout" value="${settings.scanTimeout}" min="5000" max="60000" step="1000">
+                        <small>Maximum time to wait for barcode completion</small>
+                    </div>
+                </div>
+
+                <!-- Toast Settings -->
+                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Toast Notifications</h4>
+
+                    <div class="al-form-group">
+                        <label>Toast Position</label>
+                        <select class="al-input" id="al-setting-toast-position">
+                            <option value="top-left" ${settings.toastPosition === 'top-left' ? 'selected' : ''}>Top Left</option>
+                            <option value="top-right" ${settings.toastPosition === 'top-right' ? 'selected' : ''}>Top Right</option>
+                            <option value="bottom-left" ${settings.toastPosition === 'bottom-left' ? 'selected' : ''}>Bottom Left</option>
+                            <option value="bottom-right" ${settings.toastPosition === 'bottom-right' ? 'selected' : ''}>Bottom Right</option>
+                        </select>
+                    </div>
+
+                    <div class="al-form-group">
+                        <label>Toast Duration (ms)</label>
+                        <input type="number" class="al-input" id="al-setting-toast-duration" value="${settings.toastDuration}" min="1000" max="10000" step="500">
+                    </div>
+
+                    <div class="al-form-group">
+                        <div class="al-checkbox-group">
+                            <input type="checkbox" id="al-setting-toast-sticky" ${settings.toastSticky ? 'checked' : ''}>
+                            <label for="al-setting-toast-sticky" style="margin: 0;">Sticky (requires manual dismiss)</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Speech Settings -->
+                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Speech Synthesis</h4>
+
+                    <div class="al-form-group">
+                        <div class="al-checkbox-group">
+                            <input type="checkbox" id="al-setting-speech-enabled" ${settings.speechEnabled ? 'checked' : ''}>
+                            <label for="al-setting-speech-enabled" style="margin: 0;">Enable Speech</label>
+                        </div>
+                    </div>
+
+                    <div class="al-form-group">
+                        <label>Speech Rate</label>
+                        <input type="range" class="al-input" id="al-setting-speech-rate" value="${settings.speechRate}" min="0.5" max="2.0" step="0.1" style="width: 100%;">
+                        <small>Current: <span id="al-speech-rate-value">${settings.speechRate}</span>x</small>
+                    </div>
+
+                    <div class="al-form-group">
+                        <label>Speech Pitch</label>
+                        <input type="range" class="al-input" id="al-setting-speech-pitch" value="${settings.speechPitch}" min="0.5" max="2.0" step="0.1" style="width: 100%;">
+                        <small>Current: <span id="al-speech-pitch-value">${settings.speechPitch}</span>x</small>
+                    </div>
+
+                    <div class="al-form-group">
+                        <button class="al-btn al-btn-secondary" id="al-test-speech-btn">Test Speech</button>
+                    </div>
+                </div>
+
+                <!-- Ticker Settings -->
+                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Ticker</h4>
+
+                    <div class="al-form-group">
+                        <div class="al-checkbox-group">
+                            <input type="checkbox" id="al-setting-ticker-enabled" ${settings.tickerEnabled ? 'checked' : ''}>
+                            <label for="al-setting-ticker-enabled" style="margin: 0;">Show Ticker Bar</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Debug Settings -->
+                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Debug</h4>
+
+                    <div class="al-form-group">
+                        <div class="al-checkbox-group">
+                            <input type="checkbox" id="al-setting-debug-enabled" ${settings.debugEnabled ? 'checked' : ''}>
+                            <label for="al-setting-debug-enabled" style="margin: 0;">Enable Debug Logging</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div style="margin-top: 20px;">
+                    <button class="al-btn" id="al-save-settings-btn">Save Settings</button>
+                    <button class="al-btn al-btn-secondary" id="al-reset-settings-btn">Reset to Defaults</button>
+                </div>
+            `;
+
+            // Update speech rate/pitch value displays
+            document.getElementById('al-setting-speech-rate').oninput = (e) => {
+                document.getElementById('al-speech-rate-value').textContent = e.target.value;
+            };
+
+            document.getElementById('al-setting-speech-pitch').oninput = (e) => {
+                document.getElementById('al-speech-pitch-value').textContent = e.target.value;
+            };
+
+            // Test speech button
+            document.getElementById('al-test-speech-btn').onclick = () => {
+                const enabled = document.getElementById('al-setting-speech-enabled').checked;
+                const rate = parseFloat(document.getElementById('al-setting-speech-rate').value);
+                const pitch = parseFloat(document.getElementById('al-setting-speech-pitch').value);
+
+                if (!enabled) {
+                    this.showToast('Speech Disabled', 'Enable speech to test', 'warning');
+                    return;
+                }
+
+                // Test with custom rate/pitch
+                const utterance = new SpeechSynthesisUtterance('This is a test of the speech synthesis system.');
+                utterance.rate = rate;
+                utterance.pitch = pitch;
+                window.speechSynthesis.speak(utterance);
+            };
+
+            // Save button
+            document.getElementById('al-save-settings-btn').onclick = () => {
+                this.saveSettingsFromForm();
+            };
+
+            // Reset button
+            document.getElementById('al-reset-settings-btn').onclick = () => {
+                if (confirm('Reset all settings to defaults?')) {
+                    AL.persistence.set('settings', AL.stubs.getDefaultSettings());
+                    this.showToast('Settings Reset', 'All settings restored to defaults', 'success');
+                    this.renderSettings(content);
+                }
+            };
+        },
+
+        /**
+         * Save settings from form
+         */
+        saveSettingsFromForm() {
+            const settings = {
+                // Layout
+                dockMode: document.getElementById('al-setting-dock-mode').value,
+                panelWidth: parseInt(document.getElementById('al-setting-panel-width').value),
+                panelHeight: parseInt(document.getElementById('al-setting-panel-height').value),
+                topGap: 0,
+
+                // Capture
+                captureMode: AL.capture.mode,
+                scanThrottle: parseInt(document.getElementById('al-setting-scan-throttle').value),
+                duplicateWindow: parseInt(document.getElementById('al-setting-duplicate-window').value),
+                scanTimeout: parseInt(document.getElementById('al-setting-scan-timeout').value),
+
+                // Toast
+                toastPosition: document.getElementById('al-setting-toast-position').value,
+                toastDuration: parseInt(document.getElementById('al-setting-toast-duration').value),
+                toastSticky: document.getElementById('al-setting-toast-sticky').checked,
+                toastSound: false,
+
+                // Speech
+                speechEnabled: document.getElementById('al-setting-speech-enabled').checked,
+                speechRate: parseFloat(document.getElementById('al-setting-speech-rate').value),
+                speechPitch: parseFloat(document.getElementById('al-setting-speech-pitch').value),
+
+                // Ticker
+                tickerEnabled: document.getElementById('al-setting-ticker-enabled').checked,
+
+                // Tab visibility
+                visibleTabs: ['dashboard', 'rules', 'fields', 'prefixes', 'macros', 'favorites', 'bwc', 'x10', 'batch', 'history', 'settings', 'debug'],
+
+                // Debug
+                debugEnabled: document.getElementById('al-setting-debug-enabled').checked,
+                debugAutoScroll: true,
+                debugWrap: false,
+
+                // Current tab
+                currentTab: this.currentTab
+            };
+
+            AL.persistence.set('settings', settings);
+            this.showToast('Settings Saved', 'Settings updated successfully', 'success');
+
+            // Apply dock mode change
+            if (this.panel) {
+                this.panel.className = settings.dockMode;
+            }
+
+            // Apply ticker visibility
+            if (settings.tickerEnabled && !this.ticker) {
+                this.createTicker();
+            } else if (!settings.tickerEnabled && this.ticker) {
+                this.ticker.remove();
+                this.ticker = null;
+            }
+        },
+
+        /**
+         * Show prefix editor modal
+         */
+        showPrefixEditor(prefix = null) {
+            const isEdit = prefix !== null;
+            const title = isEdit ? 'Edit Prefix' : 'Add New Prefix';
+
+            const editPrefix = prefix || {
+                id: null,
+                label: '',
+                value: '',
+                hotkey: null,
+                stickyCount: 1
+            };
+
+            const overlay = document.createElement('div');
+            overlay.className = 'al-modal-overlay';
+            overlay.id = 'al-modal-prefix-editor';
+
+            // Get available hotkeys (1-9 not already assigned)
+            const usedHotkeys = AL.prefixes.prefixes
+                .filter(p => p.id !== editPrefix.id)
+                .map(p => p.hotkey)
+                .filter(h => h !== null);
+            const availableHotkeys = [1, 2, 3, 4, 5, 6, 7, 8, 9].filter(n => !usedHotkeys.includes(n));
+
+            let hotkeyOptions = '<option value="">None</option>';
+            for (let i = 1; i <= 9; i++) {
+                const available = availableHotkeys.includes(i) || editPrefix.hotkey === i;
+                const selected = editPrefix.hotkey === i ? 'selected' : '';
+                const disabled = !available ? 'disabled' : '';
+                hotkeyOptions += `<option value="${i}" ${selected} ${disabled}>Alt+${i}${!available ? ' (in use)' : ''}</option>`;
+            }
+
+            overlay.innerHTML = `
+                <div class="al-modal" onclick="event.stopPropagation()">
+                    <div class="al-modal-header">
+                        <h3>${title}</h3>
+                        <button class="al-btn al-btn-secondary" onclick="AL.ui.closePrefixModal()">×</button>
+                    </div>
+                    <div class="al-modal-body">
+                        <div class="al-form-group">
+                            <label>Label *</label>
+                            <input type="text" class="al-input" id="al-prefix-label" value="${AL.utils.escapeHtml(editPrefix.label)}" placeholder="e.g., Building A">
+                            <small>Descriptive name for this prefix</small>
+                        </div>
+
+                        <div class="al-form-group">
+                            <label>Prefix Value *</label>
+                            <input type="text" class="al-input" id="al-prefix-value" value="${AL.utils.escapeHtml(editPrefix.value)}" placeholder="e.g., BLD-A-">
+                            <small>Text that will be prepended to scanned barcodes</small>
+                        </div>
+
+                        <div class="al-form-group">
+                            <label>Hotkey</label>
+                            <select class="al-input" id="al-prefix-hotkey">
+                                ${hotkeyOptions}
+                            </select>
+                            <small>Keyboard shortcut to activate this prefix (Alt+1 through Alt+9)</small>
+                        </div>
+
+                        <div class="al-form-group">
+                            <label>Sticky Count *</label>
+                            <input type="number" class="al-input" id="al-prefix-sticky" value="${editPrefix.stickyCount}" min="1" max="999">
+                            <small>Number of scans this prefix stays active for (default: 1)</small>
+                        </div>
+                    </div>
+                    <div class="al-modal-footer">
+                        <button class="al-btn al-btn-secondary" onclick="AL.ui.closePrefixModal()">Cancel</button>
+                        <button class="al-btn" id="al-save-prefix-btn">${isEdit ? 'Update' : 'Add'} Prefix</button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(overlay);
+
+            // Close on overlay click
+            overlay.onclick = () => this.closePrefixModal();
+
+            // Save button
+            document.getElementById('al-save-prefix-btn').onclick = () => {
+                this.savePrefixFromModal(editPrefix.id);
+            };
+        },
+
+        /**
+         * Save prefix from modal
+         */
+        savePrefixFromModal(prefixId) {
+            const label = document.getElementById('al-prefix-label').value.trim();
+            const value = document.getElementById('al-prefix-value').value;
+            const hotkeyStr = document.getElementById('al-prefix-hotkey').value;
+            const hotkey = hotkeyStr ? parseInt(hotkeyStr) : null;
+            const stickyCount = parseInt(document.getElementById('al-prefix-sticky').value) || 1;
+
+            // Validation
+            if (!label) {
+                this.showToast('Validation Error', 'Label is required', 'error');
+                return;
+            }
+
+            if (!value && value !== '') {
+                this.showToast('Validation Error', 'Prefix value is required', 'error');
+                return;
+            }
+
+            // Build prefix object
+            const prefix = {
+                label,
+                value,
+                hotkey,
+                stickyCount
+            };
+
+            // Add or update
+            if (prefixId) {
+                AL.prefixes.updatePrefix(prefixId, prefix);
+                this.showToast('Prefix Updated', `Updated prefix: ${label}`, 'success');
+            } else {
+                AL.prefixes.addPrefix(prefix);
+                this.showToast('Prefix Added', `Added new prefix: ${label}`, 'success');
+            }
+
+            // Close modal and refresh
+            this.closePrefixModal();
+
+            // Refresh prefixes tab if it's open
+            const content = document.getElementById('al-content');
+            if (content && this.currentTab === 'prefixes') {
+                this.renderPrefixes(content);
+            }
+        },
+
+        /**
+         * Close prefix modal
+         */
+        closePrefixModal() {
+            const modal = document.getElementById('al-modal-prefix-editor');
+            if (modal) {
+                modal.remove();
+            }
+        },
+
+        /**
+         * Show rule editor modal
+         */
+        showRuleEditor(rule = null) {
+            const isEdit = rule !== null;
+            const title = isEdit ? 'Edit Rule' : 'Add New Rule';
+
+            // Default rule structure
+            const editRule = rule || {
+                id: null,
+                name: '',
+                enabled: true,
+                pattern: '',
+                patternType: 'regex',
+                useDirective: false,
+                directiveChars: ['*', '/'],
+                groupIndexes: [],
+                speechLabel: '',
+                actions: []
+            };
+
+            // Create modal overlay
+            const overlay = document.createElement('div');
+            overlay.className = 'al-modal-overlay';
+            overlay.id = 'al-modal-rule-editor';
+
+            overlay.innerHTML = `
+                <div class="al-modal" onclick="event.stopPropagation()">
+                    <div class="al-modal-header">
+                        <h3>${title}</h3>
+                        <button class="al-btn al-btn-secondary" onclick="AL.ui.closeModal()">×</button>
+                    </div>
+                    <div class="al-modal-body">
+                        <div class="al-form-group">
+                            <label>Rule Name *</label>
+                            <input type="text" class="al-input" id="al-rule-name" value="${AL.utils.escapeHtml(editRule.name)}" placeholder="e.g., PID with Directive">
+                        </div>
+
+                        <div class="al-form-group">
+                            <div class="al-checkbox-group">
+                                <input type="checkbox" id="al-rule-enabled" ${editRule.enabled ? 'checked' : ''}>
+                                <label for="al-rule-enabled" style="margin: 0;">Enabled</label>
+                            </div>
+                        </div>
+
+                        <div class="al-form-group">
+                            <label>Pattern Type *</label>
+                            <select class="al-input" id="al-rule-pattern-type">
+                                <option value="regex" ${editRule.patternType === 'regex' ? 'selected' : ''}>Regular Expression</option>
+                                <option value="string" ${editRule.patternType === 'string' ? 'selected' : ''}>Exact String</option>
+                                <option value="startsWith" ${editRule.patternType === 'startsWith' ? 'selected' : ''}>Starts With</option>
+                                <option value="contains" ${editRule.patternType === 'contains' ? 'selected' : ''}>Contains</option>
+                                <option value="endsWith" ${editRule.patternType === 'endsWith' ? 'selected' : ''}>Ends With</option>
+                            </select>
+                        </div>
+
+                        <div class="al-form-group">
+                            <label>Pattern *</label>
+                            <input type="text" class="al-input" id="al-rule-pattern" value="${AL.utils.escapeHtml(editRule.pattern)}" placeholder="e.g., ^([*/])([A-Z0-9]+)([*/])?">
+                            <small>For regex: use capture groups (parentheses) to extract variables</small>
+                        </div>
+
+                        <div class="al-form-group">
+                            <div class="al-checkbox-group">
+                                <input type="checkbox" id="al-rule-use-directive" ${editRule.useDirective ? 'checked' : ''}>
+                                <label for="al-rule-use-directive" style="margin: 0;">Use Directive System</label>
+                            </div>
+                            <small>Extract * (Deployment) or / (Return) from barcode</small>
+                        </div>
+
+                        <div class="al-form-group" id="al-directive-chars-group" style="display: ${editRule.useDirective ? 'block' : 'none'};">
+                            <label>Directive Characters</label>
+                            <input type="text" class="al-input" id="al-rule-directive-chars" value="${editRule.directiveChars.join(', ')}" placeholder="*, /">
+                            <small>Comma-separated characters to detect (e.g., *, /)</small>
+                        </div>
+
+                        <div class="al-form-group">
+                            <label>Speech Label</label>
+                            <input type="text" class="al-input" id="al-rule-speech-label" value="${AL.utils.escapeHtml(editRule.speechLabel || '')}" placeholder="e.g., PID">
+                            <small>Text to speak when rule matches (optional)</small>
+                        </div>
+
+                        <div class="al-form-group">
+                            <label>Actions</label>
+                            <div id="al-rule-actions-list"></div>
+                            <button class="al-btn al-btn-secondary" id="al-add-action-btn" style="margin-top: 10px;">+ Add Action</button>
+                        </div>
+                    </div>
+                    <div class="al-modal-footer">
+                        <button class="al-btn al-btn-secondary" onclick="AL.ui.closeModal()">Cancel</button>
+                        <button class="al-btn" id="al-save-rule-btn">${isEdit ? 'Update' : 'Add'} Rule</button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(overlay);
+
+            // Close on overlay click
+            overlay.onclick = () => this.closeModal();
+
+            // Toggle directive chars visibility
+            document.getElementById('al-rule-use-directive').onchange = (e) => {
+                document.getElementById('al-directive-chars-group').style.display = e.target.checked ? 'block' : 'none';
+            };
+
+            // Render actions
+            this.renderRuleActions(editRule.actions);
+
+            // Add action button
+            document.getElementById('al-add-action-btn').onclick = () => {
+                this.showAddActionDialog();
+            };
+
+            // Save button
+            document.getElementById('al-save-rule-btn').onclick = () => {
+                this.saveRuleFromModal(editRule.id);
+            };
+        },
+
+        /**
+         * Render actions list in rule editor
+         */
+        renderRuleActions(actions) {
+            const actionsList = document.getElementById('al-rule-actions-list');
+            if (!actionsList) return;
+
+            if (actions.length === 0) {
+                actionsList.innerHTML = '<div style="color: #999; font-size: 12px;">No actions configured</div>';
+                return;
+            }
+
+            actionsList.innerHTML = actions.map((action, index) => {
+                let display = '';
+                switch (action.type) {
+                    case 'setField':
+                        display = `Set field <strong>${action.field}</strong> = <code>${action.value}</code>`;
+                        break;
+                    case 'setType':
+                        display = `Set Type = <code>${action.value}</code>`;
+                        break;
+                    case 'toast':
+                        display = `Toast: ${action.message || action.title}`;
+                        break;
+                    case 'speech':
+                        display = `Speak: "${action.text}"`;
+                        break;
+                    default:
+                        display = `Action: ${action.type}`;
+                }
+
+                return `
+                    <div class="al-action-item" data-index="${index}">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 12px;">${display}</span>
+                            <button class="al-btn al-btn-danger" style="font-size: 11px; padding: 4px 8px;" onclick="AL.ui.removeAction(${index})">Remove</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        },
+
+        /**
+         * Show add action dialog
+         */
+        showAddActionDialog() {
+            const actionType = prompt('Select action type:\n\n1. setField - Set a field value\n2. setType - Set the Type field\n3. toast - Show toast notification\n4. speech - Speak text\n\nEnter number (1-4):');
+
+            if (!actionType) return;
+
+            let action = null;
+
+            switch (actionType) {
+                case '1': // setField
+                    const fieldKey = prompt('Enter field key (e.g., user, external_contact, department):');
+                    if (!fieldKey) return;
+                    const fieldValue = prompt('Enter field value (use ${group1}, ${group2}, ${directive}, etc.):');
+                    if (fieldValue === null) return;
+                    action = { type: 'setField', field: fieldKey, value: fieldValue };
+                    break;
+
+                case '2': // setType
+                    const typeValue = prompt('Enter Type value (use ${directive} for dynamic value):');
+                    if (typeValue === null) return;
+                    action = { type: 'setType', value: typeValue };
+                    break;
+
+                case '3': // toast
+                    const toastMsg = prompt('Enter toast message:');
+                    if (!toastMsg) return;
+                    action = { type: 'toast', title: 'Notification', message: toastMsg, level: 'info' };
+                    break;
+
+                case '4': // speech
+                    const speechText = prompt('Enter speech text:');
+                    if (!speechText) return;
+                    action = { type: 'speech', text: speechText };
+                    break;
+
+                default:
+                    this.showToast('Invalid Action', 'Unknown action type', 'error');
+                    return;
+            }
+
+            // Get current actions from modal state
+            const actionsListEl = document.getElementById('al-rule-actions-list');
+            const currentActions = this._modalActions || [];
+            currentActions.push(action);
+            this._modalActions = currentActions;
+            this.renderRuleActions(currentActions);
+        },
+
+        /**
+         * Remove action from editor
+         */
+        removeAction(index) {
+            if (!this._modalActions) return;
+            this._modalActions.splice(index, 1);
+            this.renderRuleActions(this._modalActions);
+        },
+
+        /**
+         * Save rule from modal
+         */
+        saveRuleFromModal(ruleId) {
+            const name = document.getElementById('al-rule-name').value.trim();
+            const pattern = document.getElementById('al-rule-pattern').value.trim();
+            const patternType = document.getElementById('al-rule-pattern-type').value;
+            const enabled = document.getElementById('al-rule-enabled').checked;
+            const useDirective = document.getElementById('al-rule-use-directive').checked;
+            const directiveCharsStr = document.getElementById('al-rule-directive-chars').value;
+            const speechLabel = document.getElementById('al-rule-speech-label').value.trim();
+
+            // Validation
+            if (!name) {
+                this.showToast('Validation Error', 'Rule name is required', 'error');
+                return;
+            }
+
+            if (!pattern) {
+                this.showToast('Validation Error', 'Pattern is required', 'error');
+                return;
+            }
+
+            // Validate regex if pattern type is regex
+            if (patternType === 'regex') {
+                try {
+                    new RegExp(pattern);
+                } catch (e) {
+                    this.showToast('Validation Error', 'Invalid regex pattern: ' + e.message, 'error');
+                    return;
+                }
+            }
+
+            // Parse directive chars
+            const directiveChars = directiveCharsStr.split(',').map(c => c.trim()).filter(c => c.length > 0);
+
+            // Build rule object
+            const rule = {
+                name,
+                enabled,
+                pattern,
+                patternType,
+                useDirective,
+                directiveChars: directiveChars.length > 0 ? directiveChars : ['*', '/'],
+                groupIndexes: [],
+                speechLabel,
+                actions: this._modalActions || []
+            };
+
+            // Add or update
+            if (ruleId) {
+                AL.rules.updateRule(ruleId, rule);
+                this.showToast('Rule Updated', `Updated rule: ${name}`, 'success');
+            } else {
+                AL.rules.addRule(rule);
+                this.showToast('Rule Added', `Added new rule: ${name}`, 'success');
+            }
+
+            // Close modal and refresh
+            this.closeModal();
+
+            // Refresh rules tab if it's open
+            const content = document.getElementById('al-content');
+            if (content && this.currentTab === 'rules') {
+                this.renderRules(content);
+            }
+        },
+
+        /**
+         * Close modal
+         */
+        closeModal() {
+            const modal = document.getElementById('al-modal-rule-editor');
+            if (modal) {
+                modal.remove();
+            }
+            this._modalActions = null;
         },
 
         /**
