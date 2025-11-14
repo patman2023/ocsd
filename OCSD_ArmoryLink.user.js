@@ -3829,13 +3829,53 @@
         // Per-page context store for ServiceNow Workspace tabs
         pages: {},         // Map of pageId -> context object
         activePageId: null,  // Currently active page ID
-        tabRegistry: new WeakMap(),  // Map tab DOM elements to their stable IDs
-        tabToPageId: {},     // Map stable tab IDs to page IDs
+        tabMetadata: {},    // Persistent metadata: fingerprint -> {stableId, recordId, tabText, created, lastSeen}
         observingTabs: false, // Flag to track if we're observing tabs
 
         init() {
             console.log('[pageState] Initialized');
+            this.loadTabMetadata();
             this.startTabMonitoring();
+        },
+
+        /**
+         * Load tab metadata from localStorage
+         */
+        loadTabMetadata() {
+            try {
+                const stored = localStorage.getItem('al-tab-metadata');
+                if (stored) {
+                    this.tabMetadata = JSON.parse(stored);
+                    console.log('[pageState] Loaded', Object.keys(this.tabMetadata).length, 'tab metadata entries');
+                }
+            } catch (e) {
+                console.error('[pageState] Error loading tab metadata:', e);
+                this.tabMetadata = {};
+            }
+        },
+
+        /**
+         * Save tab metadata to localStorage
+         */
+        saveTabMetadata() {
+            try {
+                localStorage.setItem('al-tab-metadata', JSON.stringify(this.tabMetadata));
+            } catch (e) {
+                console.error('[pageState] Error saving tab metadata:', e);
+            }
+        },
+
+        /**
+         * Create a fingerprint for a tab to identify it across sessions
+         */
+        getTabFingerprint(tab) {
+            const tabText = (tab.textContent || '').trim();
+            const tabId = tab.id || '';
+            const ariaControls = tab.getAttribute('aria-controls') || '';
+
+            // Use tab text as primary identifier (this is what the user sees)
+            // Combined with other stable attributes
+            return `${tabId}::${ariaControls}::${tabText}`.toLowerCase().replace(/\s+/g, ' ');
         },
 
         /**
@@ -3896,33 +3936,90 @@
 
             console.log('[pageState] Scanning', tabs.length, 'tabs');
 
+            // Track which fingerprints we see in this scan
+            const activeFingerprints = new Set();
+
             tabs.forEach(tab => {
-                // Check if this tab already has a stable ID registered
-                let stableId = this.tabRegistry.get(tab);
+                const fingerprint = this.getTabFingerprint(tab);
+                activeFingerprints.add(fingerprint);
 
-                if (!stableId) {
-                    // Try to get existing data-al-stable-id
-                    stableId = tab.getAttribute('data-al-stable-id');
+                // Get or create metadata for this tab
+                let metadata = this.tabMetadata[fingerprint];
 
-                    if (!stableId) {
-                        // Generate new stable ID
-                        stableId = AL.utils.generateId();
-                        tab.setAttribute('data-al-stable-id', stableId);
-                        console.log('[pageState] Assigned new stable ID to tab:', stableId);
+                if (!metadata) {
+                    // Check if tab has a stable ID from a previous session
+                    const existingStableId = tab.getAttribute('data-al-stable-id');
+
+                    if (existingStableId) {
+                        // Try to find metadata by stable ID (in case fingerprint changed)
+                        for (const [fp, meta] of Object.entries(this.tabMetadata)) {
+                            if (meta.stableId === existingStableId) {
+                                // Found it! Update the fingerprint key
+                                console.log('[pageState] Updating fingerprint for', existingStableId, 'from', fp, 'to', fingerprint);
+                                delete this.tabMetadata[fp];
+                                meta.fingerprint = fingerprint;
+                                meta.tabText = tab.textContent?.trim() || '';
+                                metadata = meta;
+                                this.tabMetadata[fingerprint] = metadata;
+                                break;
+                            }
+                        }
                     }
 
-                    // Register in WeakMap
-                    this.tabRegistry.set(tab, stableId);
+                    if (!metadata) {
+                        // Create completely new metadata
+                        const stableId = AL.utils.generateId();
+                        metadata = {
+                            stableId: stableId,
+                            fingerprint: fingerprint,
+                            created: Date.now(),
+                            lastSeen: Date.now(),
+                            tabText: tab.textContent?.trim() || '',
+                            recordId: null
+                        };
+                        this.tabMetadata[fingerprint] = metadata;
+                        console.log('[pageState] NEW tab:', stableId, '-', metadata.tabText.substring(0, 50));
+                    }
                 }
 
-                // Try to get the record sys_id or other identifier from the tab's content
+                // Update metadata
+                metadata.lastSeen = Date.now();
+                metadata.tabText = tab.textContent?.trim() || '';
+
+                // Set the stable ID on the tab element
+                tab.setAttribute('data-al-stable-id', metadata.stableId);
+
+                // Try to extract and store the record ID
                 const recordId = this.extractRecordIdFromTab(tab);
-                if (recordId) {
-                    // Associate the stable tab ID with the record ID
-                    this.tabToPageId[stableId] = recordId;
-                    console.log('[pageState] Associated stable ID', stableId, 'with record', recordId);
+                if (recordId && recordId !== metadata.recordId) {
+                    console.log('[pageState] Linking', metadata.stableId, 'to record', recordId);
+                    metadata.recordId = recordId;
                 }
             });
+
+            // Clean up old metadata (tabs that haven't been seen in 10 minutes)
+            const now = Date.now();
+            const tenMinutes = 10 * 60 * 1000;
+            let cleaned = 0;
+
+            for (const [fingerprint, metadata] of Object.entries(this.tabMetadata)) {
+                if (!activeFingerprints.has(fingerprint) && (now - metadata.lastSeen) > tenMinutes) {
+                    console.log('[pageState] Removing stale tab:', metadata.stableId, '-', metadata.tabText.substring(0, 50));
+                    delete this.tabMetadata[fingerprint];
+                    // Also remove the associated page data
+                    const pageId = `stable::${metadata.stableId}`;
+                    if (this.pages[pageId]) {
+                        delete this.pages[pageId];
+                    }
+                    cleaned++;
+                }
+            }
+
+            if (cleaned > 0) {
+                console.log('[pageState] Cleaned up', cleaned, 'stale tabs');
+            }
+
+            this.saveTabMetadata();
         },
 
         /**
@@ -3957,31 +4054,54 @@
         },
 
         /**
-         * Get stable ID for the currently selected tab
+         * Get metadata for the currently selected tab
          */
-        getActiveTabStableId() {
+        getActiveTabMetadata() {
             const tabElement = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected') ||
                                AL.utils.querySelectorDeep('[role="tab"][aria-selected="true"]');
 
             if (!tabElement) return null;
 
-            // Check WeakMap first
-            let stableId = this.tabRegistry.get(tabElement);
-
-            if (!stableId) {
-                // Try to get from attribute
-                stableId = tabElement.getAttribute('data-al-stable-id');
-
-                if (!stableId) {
-                    // Generate and register new stable ID
-                    stableId = AL.utils.generateId();
-                    tabElement.setAttribute('data-al-stable-id', stableId);
-                    this.tabRegistry.set(tabElement, stableId);
-                    console.log('[pageState] Created stable ID for active tab:', stableId);
+            // Try to get stable ID from attribute first (fastest)
+            const stableId = tabElement.getAttribute('data-al-stable-id');
+            if (stableId) {
+                // Find metadata by stable ID
+                for (const metadata of Object.values(this.tabMetadata)) {
+                    if (metadata.stableId === stableId) {
+                        metadata.lastSeen = Date.now();
+                        return metadata;
+                    }
                 }
             }
 
-            return stableId;
+            // Try to find by fingerprint
+            const fingerprint = this.getTabFingerprint(tabElement);
+            let metadata = this.tabMetadata[fingerprint];
+
+            if (metadata) {
+                // Update last seen and set stable ID on element
+                metadata.lastSeen = Date.now();
+                tabElement.setAttribute('data-al-stable-id', metadata.stableId);
+                return metadata;
+            }
+
+            // Create new metadata if not found
+            const newStableId = AL.utils.generateId();
+            metadata = {
+                stableId: newStableId,
+                fingerprint: fingerprint,
+                created: Date.now(),
+                lastSeen: Date.now(),
+                tabText: tabElement.textContent?.trim() || '',
+                recordId: this.extractRecordIdFromTab(tabElement)
+            };
+
+            this.tabMetadata[fingerprint] = metadata;
+            tabElement.setAttribute('data-al-stable-id', newStableId);
+            this.saveTabMetadata();
+
+            console.log('[pageState] Created metadata for active tab:', newStableId, '-', metadata.tabText.substring(0, 50));
+            return metadata;
         },
 
         /**
@@ -3998,32 +4118,17 @@
                 return `${path}::${sysId}`;
             }
 
-            // Get the stable ID for the active tab
-            const stableTabId = this.getActiveTabStableId();
+            // Get metadata for the active tab
+            const metadata = this.getActiveTabMetadata();
 
-            if (stableTabId) {
-                // Check if we have a record ID associated with this stable tab ID
-                const recordId = this.tabToPageId[stableTabId];
-
-                if (recordId) {
-                    return `${path}::${recordId}`;
+            if (metadata) {
+                // If we have a record ID, use it (most stable)
+                if (metadata.recordId) {
+                    return `${path}::${metadata.recordId}`;
                 }
 
-                // Otherwise, try to extract record ID from the current tab
-                const tabElement = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected') ||
-                                   AL.utils.querySelectorDeep('[role="tab"][aria-selected="true"]');
-
-                if (tabElement) {
-                    const extractedRecordId = this.extractRecordIdFromTab(tabElement);
-                    if (extractedRecordId) {
-                        // Store the association
-                        this.tabToPageId[stableTabId] = extractedRecordId;
-                        return `${path}::${extractedRecordId}`;
-                    }
-                }
-
-                // Use the stable tab ID itself as the page ID
-                return `stable::${stableTabId}`;
+                // Otherwise use the stable tab ID
+                return `stable::${metadata.stableId}`;
             }
 
             // Try to extract sys_id from iframe content (classic UI fallback)
