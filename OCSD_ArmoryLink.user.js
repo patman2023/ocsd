@@ -182,51 +182,46 @@
 
             try {
                 // If no path, use deep query to pierce shadow DOM,
-                // but prefer elements that are actually visible (active workspace tab)
+                // HARD-SCOPED to active tab only (do NOT fall back to document)
                 if (!selectorPath || selectorPath.length === 0) {
-                    // Get the active workspace root if available
+                    // Get the active workspace root
                     let searchRoot = document;
+                    let hasActiveRoot = false;
+
                     if (AL.pageState && typeof AL.pageState.getActiveRoot === 'function') {
                         try {
                             const activeRoot = AL.pageState.getActiveRoot();
                             if (activeRoot && activeRoot !== document) {
                                 searchRoot = activeRoot;
-                                console.log('[utils] Using active root for search:', searchRoot);
+                                hasActiveRoot = true;
+                                // console.log('[utils] Using active root for search');
                             }
                         } catch (e) {
                             console.warn('[utils] Error getting active root:', e);
                         }
                     }
 
-                    // First, try to find in the active root
-                    if (searchRoot !== document) {
-                        const localMatches = this.querySelectorAllDeep(selector, searchRoot);
-                        if (localMatches && localMatches.length > 0) {
-                            // Prefer visible matches in active root
-                            const visibleMatch = localMatches.find(el => this.isElementVisible(el));
-                            if (visibleMatch) {
-                                return visibleMatch;
-                            }
-                            // Return first match in active root even if not visible
-                            return localMatches[0];
-                        }
-                    }
+                    // Search within the determined root (active tab or document)
+                    const matches = this.querySelectorAllDeep(selector, searchRoot);
 
-                    // Fallback: collect all matches across entire document
-                    const allMatches = this.querySelectorAllDeep(selector, document);
-
-                    if (allMatches && allMatches.length > 0) {
-                        // Prefer the first visible match
-                        const visibleMatch = allMatches.find(el => this.isElementVisible(el));
+                    if (matches && matches.length > 0) {
+                        // Prefer visible matches
+                        const visibleMatch = matches.find(el => this.isElementVisible(el));
                         if (visibleMatch) {
                             return visibleMatch;
                         }
-
-                        // Fallback: return the first match if none appear visible
-                        return allMatches[0];
+                        // Return first match even if not visible
+                        return matches[0];
                     }
 
-                    // Nothing matched at all
+                    // NO FALLBACK TO DOCUMENT if we had an active root
+                    // This prevents cross-tab contamination
+                    if (hasActiveRoot) {
+                        console.warn(`[utils] No match for "${selector}" in active tab root - NOT falling back to document`);
+                        return null;
+                    }
+
+                    // Only if there was no active root at all, return null
                     return null;
                 }
 
@@ -3999,22 +3994,101 @@
         },
 
         /**
-         * Compute pageId based on active tab ID (Tabbed Names pattern)
-         * The tab DOM ID is stable and persists even when tabs are reordered
+         * Extract table name and sys_id from the active content panel
+         * Returns {table: string|null, sysId: string|null}
+         */
+        extractRecordIdentity() {
+            // Try URL params first
+            try {
+                const url = new URL(window.location.href);
+                const table = url.searchParams.get('sysparm_table') || url.searchParams.get('table');
+                const sysId = url.searchParams.get('sysparm_sys_id') || url.searchParams.get('sys_id');
+
+                if (table && sysId) {
+                    return { table, sysId };
+                }
+                if (sysId) {
+                    return { table: 'unknown', sysId };
+                }
+            } catch (e) {
+                // URL parsing failed, continue to DOM extraction
+            }
+
+            // Try to extract from active content panel
+            const panel = this.getActiveContentPanel();
+            if (!panel) {
+                return { table: null, sysId: null };
+            }
+
+            // Look for sys_id input
+            const sysIdInput = panel.querySelector('input[name="sys_id"]') ||
+                             AL.utils.querySelectorDeep('input[name="sys_id"]', panel);
+
+            const sysId = sysIdInput?.value;
+            if (!sysId || sysId === '-1') {
+                return { table: null, sysId: null };
+            }
+
+            // Try to find table name from various sources
+            let table = null;
+
+            // Check for table input
+            const tableInput = panel.querySelector('input[name="sysparm_table"]') ||
+                             panel.querySelector('input[name="table"]') ||
+                             AL.utils.querySelectorDeep('input[name="sysparm_table"]', panel) ||
+                             AL.utils.querySelectorDeep('input[name="table"]', panel);
+
+            if (tableInput?.value) {
+                table = tableInput.value;
+            }
+
+            // Check for data attributes on form
+            if (!table) {
+                const form = panel.querySelector('form') ||
+                           AL.utils.querySelectorDeep('form', panel);
+                if (form) {
+                    table = form.getAttribute('data-table') ||
+                           form.getAttribute('data-table-name');
+                }
+            }
+
+            return { table: table || 'unknown', sysId };
+        },
+
+        /**
+         * Compute pageId based on active tab ID AND record identity
+         * Format: tab:${tabId}::${table}::${sysId}
+         * This ensures each tab+record combination has its own context
          */
         computePageId() {
-            // Primary: Use active tab ID if available
+            // Get active tab ID
             const activeTabId = AL.tabs && AL.tabs.getActiveTabId ? AL.tabs.getActiveTabId() : null;
+
             if (activeTabId) {
-                return `tab:${activeTabId}`;
+                // Extract record identity (table + sys_id)
+                const { table, sysId } = this.extractRecordIdentity();
+
+                // Build composite pageId
+                if (table && sysId) {
+                    return `tab:${activeTabId}::${table}::${sysId}`;
+                } else if (sysId) {
+                    return `tab:${activeTabId}::unknown::${sysId}`;
+                } else {
+                    // No record yet (new/empty form)
+                    return `tab:${activeTabId}::empty`;
+                }
             }
 
             // Fallback: Check URL params for classic UI or non-workspace pages
-            const url = new URL(window.location.href);
-            const urlSysId = url.searchParams.get('sysparm_sys_id') || url.searchParams.get('sys_id');
-            const path = url.pathname || '';
-            if (urlSysId) {
-                return `${path}::${urlSysId}`;
+            try {
+                const url = new URL(window.location.href);
+                const urlSysId = url.searchParams.get('sysparm_sys_id') || url.searchParams.get('sys_id');
+                const path = url.pathname || '';
+                if (urlSysId) {
+                    return `${path}::${urlSysId}`;
+                }
+            } catch (e) {
+                // URL parsing failed
             }
 
             return 'default';
@@ -4146,6 +4220,11 @@
             try {
                 const pageId = this.computePageId();
                 const ctx = this.getOrCreatePageContext(pageId);
+
+                // Extract and store record identity
+                const { table, sysId } = this.extractRecordIdentity();
+                ctx.table = table;
+                ctx.sysId = sysId;
 
                 // Read field values (safely)
                 if (!AL.fields || !AL.fields.getFieldValue) {
