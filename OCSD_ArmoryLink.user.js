@@ -3721,8 +3721,30 @@
             if (tabElement) {
                 // Generate or retrieve a unique ID for this tab
                 if (!tabElement.dataset.alPageId) {
-                    tabElement.dataset.alPageId = AL.utils.generateId();
-                    console.log('[pageState] Created new page ID:', tabElement.dataset.alPageId, 'for tab:', tabElement.textContent?.trim());
+                    // Try to find a stable identifier from the tab
+                    const tabLabel = tabElement.textContent?.trim() || '';
+                    const timestamp = Date.now();
+
+                    // Try to extract record/sys_id from the page if available
+                    const contentIframe = document.querySelector('iframe[name*="gsft"]');
+                    let recordId = '';
+                    if (contentIframe && contentIframe.contentWindow) {
+                        try {
+                            const iframeUrl = contentIframe.contentWindow.location.href;
+                            const sysIdMatch = iframeUrl.match(/sys_id=([a-f0-9]+)/);
+                            if (sysIdMatch) {
+                                recordId = sysIdMatch[1];
+                            }
+                        } catch (e) {
+                            // Cross-origin iframe, can't access
+                        }
+                    }
+
+                    // Create ID with record ID if available, otherwise use timestamp
+                    const pageId = recordId ? `page_${recordId}` : AL.utils.generateId();
+                    tabElement.dataset.alPageId = pageId;
+
+                    console.log('[pageState] 🆕 Created new page ID:', pageId, 'for tab:', tabLabel, 'recordId:', recordId || '(none)');
                 }
                 return tabElement.dataset.alPageId;
             }
@@ -3784,6 +3806,16 @@
             const controlOneRadioValue = AL.fields.getFieldValue('controlOneRadio');
             const updatedOnValue = AL.fields.getFieldValue('updated_on');
 
+            // Debug logging when forced or switched
+            if (force || switchedPage) {
+                console.log('[pageState] 📖 Reading fields for page', pageId, ':', {
+                    type: typeValue || '(empty)',
+                    user: userValue || '(empty)',
+                    vehicle: vehicleValue || '(empty)',
+                    weapon: weaponValue || '(empty)'
+                });
+            }
+
             // Only update if values have changed or if forced
             const hasChanges = force ||
                 state.type !== typeValue ||
@@ -3835,45 +3867,82 @@
         /**
          * Force refresh active state with retry (useful after tab switches)
          */
-        async forceRefreshActiveState(maxRetries = 3, delayMs = 300) {
-            console.log('[pageState] Force refreshing active state with retries...');
+        async forceRefreshActiveState(maxRetries = 8, delayMs = 500) {
+            console.log('[pageState] 🔄 Force refreshing active state with retries...');
+
+            const pageId = this.getActivePageId();
+            const previousState = this.pageStates[this.lastActivePageId];
+            const previousHash = previousState ? this.getStateHash(previousState) : null;
 
             for (let i = 0; i < maxRetries; i++) {
-                // Wait for DOM to settle
-                await new Promise(resolve => setTimeout(resolve, delayMs));
+                // Wait for DOM to settle (longer on first attempt)
+                const waitTime = i === 0 ? delayMs * 2 : delayMs;
+                console.log('[pageState] Waiting', waitTime, 'ms before attempt', i + 1);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
 
                 // Update state
                 const state = this.updateActiveState(true);
 
+                // Get hash of current state
+                const currentHash = this.getStateHash(state);
+
                 // Check if we got meaningful data
-                if (state.type || state.userFull) {
-                    console.log('[pageState] Successfully refreshed state on attempt', i + 1);
+                const hasData = state.type || state.userFull;
+
+                // Check if data is actually different from previous page
+                const isDifferent = !previousHash || currentHash !== previousHash;
+
+                console.log('[pageState] Attempt', i + 1, '- hasData:', hasData, 'isDifferent:', isDifferent, 'Type:', state.type, 'User:', state.userFull);
+
+                if (hasData && (isDifferent || i >= 3)) {
+                    console.log('[pageState] ✅ Successfully refreshed state on attempt', i + 1);
                     return state;
                 }
 
-                console.log('[pageState] Retry', i + 1, '- no data yet, waiting...');
+                if (i < maxRetries - 1) {
+                    console.log('[pageState] ⏳ Retry', i + 1, '- waiting for new data...');
+                }
             }
 
-            console.warn('[pageState] Failed to get field data after', maxRetries, 'retries');
+            console.warn('[pageState] ⚠️  Failed to get field data after', maxRetries, 'retries');
             return this.getActiveState();
+        },
+
+        /**
+         * Get a hash of the state to detect if data has changed
+         */
+        getStateHash(state) {
+            return JSON.stringify({
+                type: state.type,
+                user: state.userFull,
+                vehicle: state.vehicle,
+                weapon: state.weapon
+            });
         },
 
         /**
          * Handle tab switch event
          */
         onTabSwitch() {
-            console.log('[pageState] === TAB SWITCH EVENT ===');
+            console.log('[pageState] =====================================');
+            console.log('[pageState] 🔀 TAB SWITCH EVENT TRIGGERED');
+            console.log('[pageState] =====================================');
 
             // Clear the last active page ID to force detection of the switch
             const oldPageId = this.lastActivePageId;
+
+            // Get new page ID immediately to log it
+            const newPageId = this.getActivePageId();
+            console.log('[pageState] 📍 Old page:', oldPageId);
+            console.log('[pageState] 📍 New page:', newPageId);
+
+            // Clear lastActivePageId AFTER logging to force switch detection
             this.lastActivePageId = null;
 
-            // Get new page ID
-            const newPageId = this.getActivePageId();
-            console.log('[pageState] Switched from page', oldPageId, 'to', newPageId);
+            // Force refresh with retries (increased attempts and delay)
+            this.forceRefreshActiveState(10, 600).then(() => {
+                console.log('[pageState] 🎉 Tab switch complete, updating UI');
 
-            // Force refresh with retries
-            this.forceRefreshActiveState(5, 400).then(() => {
                 // Update UI after successful refresh
                 if (AL.tabTitle && AL.tabTitle.update) {
                     AL.tabTitle.update();
@@ -3881,6 +3950,9 @@
                 if (AL.ui && AL.ui.updateTicker) {
                     AL.ui.updateTicker();
                 }
+
+                console.log('[pageState] ✅ UI updated for new tab');
+                console.log('[pageState] =====================================');
             });
         },
 
