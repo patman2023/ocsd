@@ -134,6 +134,37 @@
         },
 
         /**
+         * Check if an element is actually visible in the DOM
+         * Used to prefer active workspace tab fields over hidden duplicates
+         */
+        isElementVisible(el) {
+            if (!el || !(el instanceof Element)) return false;
+
+            // Skip if hidden via attribute
+            if (el.hasAttribute('hidden')) return false;
+
+            // Skip if aria-hidden="true" on this or any ancestor/host
+            let node = el;
+            while (node) {
+                if (node.getAttribute && node.getAttribute('aria-hidden') === 'true') {
+                    return false;
+                }
+                node = node.parentNode || (node.host || null);
+            }
+
+            // Use geometry + computed style as a final check
+            const rect = el.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) return false;
+
+            const style = window.getComputedStyle(el);
+            if (!style || style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+                return false;
+            }
+
+            return true;
+        },
+
+        /**
          * Find element by CSS selector with optional iframe/shadow DOM path
          * Uses deep query by default for shadow DOM piercing
          */
@@ -149,9 +180,25 @@
             }
 
             try {
-                // If no path, use deep query to pierce shadow DOM
+                // If no path, use deep query to pierce shadow DOM,
+                // but prefer elements that are actually visible (active workspace tab)
                 if (!selectorPath || selectorPath.length === 0) {
-                    return this.querySelectorDeep(selector);
+                    // First, collect all matches across document, including shadow roots/iframes
+                    const allMatches = this.querySelectorAllDeep(selector);
+
+                    if (allMatches && allMatches.length > 0) {
+                        // Prefer the first visible match
+                        const visibleMatch = allMatches.find(el => this.isElementVisible(el));
+                        if (visibleMatch) {
+                            return visibleMatch;
+                        }
+
+                        // Fallback: return the first match if none appear visible
+                        return allMatches[0];
+                    }
+
+                    // Nothing matched at all
+                    return null;
                 }
 
                 // Walk through path (iframes, shadow roots)
