@@ -134,6 +134,40 @@
         },
 
         /**
+         * Check if an element is within the active workspace tab's content
+         * Returns true only if element is in the active tab's panel
+         */
+        isInActiveTab(el) {
+            if (!el || !(el instanceof Element)) return false;
+
+            // Get the active root (content panel)
+            if (!AL.pageState || typeof AL.pageState.getActiveRoot !== 'function') {
+                return true; // No tab context, allow all
+            }
+
+            try {
+                const activeRoot = AL.pageState.getActiveRoot();
+                if (!activeRoot || activeRoot === document) {
+                    return true; // No specific root, allow all
+                }
+
+                // Check if element is a descendant of the active root
+                let node = el;
+                while (node) {
+                    if (node === activeRoot) {
+                        return true; // Element is within active root
+                    }
+                    node = node.parentNode || (node.getRootNode && node.getRootNode().host) || null;
+                }
+
+                return false; // Element is NOT in active root
+            } catch (e) {
+                console.warn('[utils] Error checking if element in active tab:', e);
+                return true; // On error, allow element
+            }
+        },
+
+        /**
          * Check if an element is actually visible in the DOM
          * Used to prefer active workspace tab fields over hidden duplicates
          */
@@ -182,7 +216,7 @@
 
             try {
                 // If no path, use deep query to pierce shadow DOM,
-                // Prefer active tab but allow fallback if nothing visible found
+                // CRITICAL: Check both visibility AND tab ancestry to prevent cross-tab contamination
                 if (!selectorPath || selectorPath.length === 0) {
                     // Get the active workspace root
                     let searchRoot = document;
@@ -200,41 +234,47 @@
                         }
                     }
 
-                    // First priority: Search within active root
-                    if (hasActiveRoot) {
-                        const localMatches = this.querySelectorAllDeep(selector, searchRoot);
-                        if (localMatches && localMatches.length > 0) {
-                            // Prefer visible matches in active root
-                            const visibleMatch = localMatches.find(el => this.isElementVisible(el));
-                            if (visibleMatch) {
-                                return visibleMatch;
-                            }
-                            // Return first match in active root even if not visible
-                            return localMatches[0];
-                        }
-                    }
-
-                    // Second priority: Search document but ONLY return visible elements
-                    // This prevents returning hidden fields from other tabs
+                    // Search entire document (to handle various DOM structures)
                     const allMatches = this.querySelectorAllDeep(selector, document);
+
                     if (allMatches && allMatches.length > 0) {
-                        // CRITICAL: Only use visible matches to avoid cross-tab contamination
-                        const visibleMatch = allMatches.find(el => this.isElementVisible(el));
-                        if (visibleMatch) {
-                            if (hasActiveRoot) {
-                                console.log(`[utils] No match in active root, but found visible element in document for: ${selector}`);
-                            }
-                            return visibleMatch;
+                        // CRITICAL: Filter by BOTH visibility AND active tab ancestry
+                        const validMatches = allMatches.filter(el => {
+                            const isVisible = this.isElementVisible(el);
+                            const isInActive = this.isInActiveTab(el);
+                            return isVisible && isInActive;
+                        });
+
+                        if (validMatches.length > 0) {
+                            // Return first element that is both visible AND in active tab
+                            return validMatches[0];
                         }
 
-                        // If we have an active root but no visible matches anywhere,
-                        // do NOT return hidden elements (prevents tab mixing)
+                        // If we have an active root, try searching just in that root
+                        // (handles case where visibility check might fail but element is in right place)
                         if (hasActiveRoot) {
-                            console.warn(`[utils] No visible match for "${selector}" - refusing to use hidden elements`);
+                            const localMatches = this.querySelectorAllDeep(selector, searchRoot);
+                            if (localMatches && localMatches.length > 0) {
+                                // Prefer visible match in active root
+                                const visibleInRoot = localMatches.find(el => this.isElementVisible(el));
+                                if (visibleInRoot) {
+                                    return visibleInRoot;
+                                }
+                                // Return first match in active root even if not visible
+                                return localMatches[0];
+                            }
+                            // No matches in active root either
+                            console.warn(`[utils] No valid match for "${selector}" in active tab`);
                             return null;
                         }
 
-                        // No active root context, return first match as fallback
+                        // No active root context - use first visible match as fallback
+                        const anyVisible = allMatches.find(el => this.isElementVisible(el));
+                        if (anyVisible) {
+                            return anyVisible;
+                        }
+
+                        // Last resort: return first match
                         return allMatches[0];
                     }
 
