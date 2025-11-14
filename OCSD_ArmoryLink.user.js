@@ -3829,320 +3829,61 @@
         // Per-page context store for ServiceNow Workspace tabs
         pages: {},         // Map of pageId -> context object
         activePageId: null,  // Currently active page ID
-        tabMetadata: {},    // Persistent metadata: fingerprint -> {stableId, recordId, tabText, created, lastSeen}
-        observingTabs: false, // Flag to track if we're observing tabs
 
         init() {
-            console.log('[pageState] Initialized');
-            this.loadTabMetadata();
-            this.startTabMonitoring();
+            console.log('[pageState] Initialized - using content-based tracking');
         },
 
         /**
-         * Load tab metadata from localStorage
+         * Get the content panel for currently active tab
          */
-        loadTabMetadata() {
-            try {
-                const stored = localStorage.getItem('al-tab-metadata');
-                if (stored) {
-                    this.tabMetadata = JSON.parse(stored);
-                    console.log('[pageState] Loaded', Object.keys(this.tabMetadata).length, 'tab metadata entries');
-                }
-            } catch (e) {
-                console.error('[pageState] Error loading tab metadata:', e);
-                this.tabMetadata = {};
-            }
+        getActiveContentPanel() {
+            const selectedTab = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected') ||
+                              AL.utils.querySelectorDeep('[role="tab"][aria-selected="true"]');
+
+            if (!selectedTab) return null;
+
+            const panelId = selectedTab.getAttribute('aria-controls') ||
+                          selectedTab.id?.replace('tab', 'content');
+
+            if (!panelId) return null;
+
+            return document.getElementById(panelId) ||
+                   AL.utils.querySelectorDeep(`[id="${panelId}"]`) ||
+                   AL.utils.querySelectorDeep(`[role="tabpanel"][aria-labelledby="${selectedTab.id}"]`);
         },
 
         /**
-         * Save tab metadata to localStorage
-         */
-        saveTabMetadata() {
-            try {
-                localStorage.setItem('al-tab-metadata', JSON.stringify(this.tabMetadata));
-            } catch (e) {
-                console.error('[pageState] Error saving tab metadata:', e);
-            }
-        },
-
-        /**
-         * Create a fingerprint for a tab to identify it across sessions
-         */
-        getTabFingerprint(tab) {
-            const tabText = (tab.textContent || '').trim();
-            const tabId = tab.id || '';
-            const ariaControls = tab.getAttribute('aria-controls') || '';
-
-            // Use tab text as primary identifier (this is what the user sees)
-            // Combined with other stable attributes
-            return `${tabId}::${ariaControls}::${tabText}`.toLowerCase().replace(/\s+/g, ' ');
-        },
-
-        /**
-         * Start monitoring tabs for creation/deletion/reordering
-         */
-        startTabMonitoring() {
-            if (this.observingTabs) return;
-            this.observingTabs = true;
-
-            // Initial scan of existing tabs
-            this.scanAndRegisterTabs();
-
-            // Set up MutationObserver to watch for tab changes
-            const tabContainer = AL.utils.querySelectorDeep('.sn-chrome-tabs-group') ||
-                               AL.utils.querySelectorDeep('[role="tablist"]');
-
-            if (tabContainer) {
-                const observer = new MutationObserver((mutations) => {
-                    let shouldRescan = false;
-
-                    for (const mutation of mutations) {
-                        // Check if tabs were added or removed
-                        if (mutation.type === 'childList' &&
-                            (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)) {
-                            shouldRescan = true;
-                            break;
-                        }
-                    }
-
-                    if (shouldRescan) {
-                        console.log('[pageState] Tab structure changed, rescanning tabs');
-                        this.scanAndRegisterTabs();
-                    }
-                });
-
-                observer.observe(tabContainer, {
-                    childList: true,
-                    subtree: true
-                });
-
-                console.log('[pageState] Tab monitoring active');
-            } else {
-                // Retry after a delay if tab container not found yet
-                setTimeout(() => {
-                    this.observingTabs = false;
-                    this.startTabMonitoring();
-                }, 2000);
-            }
-        },
-
-        /**
-         * Scan all tabs and register them with stable IDs
-         */
-        scanAndRegisterTabs() {
-            const tabs = AL.utils.querySelectorAllDeep('.sn-chrome-one-tab') ||
-                        AL.utils.querySelectorAllDeep('[role="tab"]') ||
-                        [];
-
-            console.log('[pageState] Scanning', tabs.length, 'tabs');
-
-            // Track which fingerprints we see in this scan
-            const activeFingerprints = new Set();
-
-            tabs.forEach(tab => {
-                const fingerprint = this.getTabFingerprint(tab);
-                activeFingerprints.add(fingerprint);
-
-                // Get or create metadata for this tab
-                let metadata = this.tabMetadata[fingerprint];
-
-                if (!metadata) {
-                    // Check if tab has a stable ID from a previous session
-                    const existingStableId = tab.getAttribute('data-al-stable-id');
-
-                    if (existingStableId) {
-                        // Try to find metadata by stable ID (in case fingerprint changed)
-                        for (const [fp, meta] of Object.entries(this.tabMetadata)) {
-                            if (meta.stableId === existingStableId) {
-                                // Found it! Update the fingerprint key
-                                console.log('[pageState] Updating fingerprint for', existingStableId, 'from', fp, 'to', fingerprint);
-                                delete this.tabMetadata[fp];
-                                meta.fingerprint = fingerprint;
-                                meta.tabText = tab.textContent?.trim() || '';
-                                metadata = meta;
-                                this.tabMetadata[fingerprint] = metadata;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!metadata) {
-                        // Create completely new metadata
-                        const stableId = AL.utils.generateId();
-                        metadata = {
-                            stableId: stableId,
-                            fingerprint: fingerprint,
-                            created: Date.now(),
-                            lastSeen: Date.now(),
-                            tabText: tab.textContent?.trim() || '',
-                            recordId: null
-                        };
-                        this.tabMetadata[fingerprint] = metadata;
-                        console.log('[pageState] NEW tab:', stableId, '-', metadata.tabText.substring(0, 50));
-                    }
-                }
-
-                // Update metadata
-                metadata.lastSeen = Date.now();
-                metadata.tabText = tab.textContent?.trim() || '';
-
-                // Set the stable ID on the tab element
-                tab.setAttribute('data-al-stable-id', metadata.stableId);
-
-                // Try to extract and store the record ID
-                const recordId = this.extractRecordIdFromTab(tab);
-                if (recordId && recordId !== metadata.recordId) {
-                    console.log('[pageState] Linking', metadata.stableId, 'to record', recordId);
-                    metadata.recordId = recordId;
-                }
-            });
-
-            // Clean up old metadata (tabs that haven't been seen in 10 minutes)
-            const now = Date.now();
-            const tenMinutes = 10 * 60 * 1000;
-            let cleaned = 0;
-
-            for (const [fingerprint, metadata] of Object.entries(this.tabMetadata)) {
-                if (!activeFingerprints.has(fingerprint) && (now - metadata.lastSeen) > tenMinutes) {
-                    console.log('[pageState] Removing stale tab:', metadata.stableId, '-', metadata.tabText.substring(0, 50));
-                    delete this.tabMetadata[fingerprint];
-                    // Also remove the associated page data
-                    const pageId = `stable::${metadata.stableId}`;
-                    if (this.pages[pageId]) {
-                        delete this.pages[pageId];
-                    }
-                    cleaned++;
-                }
-            }
-
-            if (cleaned > 0) {
-                console.log('[pageState] Cleaned up', cleaned, 'stale tabs');
-            }
-
-            this.saveTabMetadata();
-        },
-
-        /**
-         * Extract record ID from a tab's associated content
-         */
-        extractRecordIdFromTab(tab) {
-            const tabId = tab.id ||
-                         tab.getAttribute('data-tab-id') ||
-                         tab.getAttribute('aria-controls');
-
-            if (!tabId) return null;
-
-            // Try to find the associated content panel
-            const contentPanel = document.getElementById(tabId) ||
-                               AL.utils.querySelectorDeep(`[id="${tabId}"]`) ||
-                               AL.utils.querySelectorDeep(`[aria-labelledby="${tabId}"]`);
-
-            if (!contentPanel) return null;
-
-            // Look for sys_id or unique record identifier in the content
-            const recordInput = contentPanel.querySelector('input[name="sys_id"]') ||
-                              contentPanel.querySelector('[data-record-id]');
-
-            if (recordInput) {
-                const recordId = recordInput.value || recordInput.getAttribute('data-record-id');
-                if (recordId && recordId !== '-1') {
-                    return recordId;
-                }
-            }
-
-            return null;
-        },
-
-        /**
-         * Get metadata for the currently selected tab
-         */
-        getActiveTabMetadata() {
-            const tabElement = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected') ||
-                               AL.utils.querySelectorDeep('[role="tab"][aria-selected="true"]');
-
-            if (!tabElement) return null;
-
-            // Try to get stable ID from attribute first (fastest)
-            const stableId = tabElement.getAttribute('data-al-stable-id');
-            if (stableId) {
-                // Find metadata by stable ID
-                for (const metadata of Object.values(this.tabMetadata)) {
-                    if (metadata.stableId === stableId) {
-                        metadata.lastSeen = Date.now();
-                        return metadata;
-                    }
-                }
-            }
-
-            // Try to find by fingerprint
-            const fingerprint = this.getTabFingerprint(tabElement);
-            let metadata = this.tabMetadata[fingerprint];
-
-            if (metadata) {
-                // Update last seen and set stable ID on element
-                metadata.lastSeen = Date.now();
-                tabElement.setAttribute('data-al-stable-id', metadata.stableId);
-                return metadata;
-            }
-
-            // Create new metadata if not found
-            const newStableId = AL.utils.generateId();
-            metadata = {
-                stableId: newStableId,
-                fingerprint: fingerprint,
-                created: Date.now(),
-                lastSeen: Date.now(),
-                tabText: tabElement.textContent?.trim() || '',
-                recordId: this.extractRecordIdFromTab(tabElement)
-            };
-
-            this.tabMetadata[fingerprint] = metadata;
-            tabElement.setAttribute('data-al-stable-id', newStableId);
-            this.saveTabMetadata();
-
-            console.log('[pageState] Created metadata for active tab:', newStableId, '-', metadata.tabText.substring(0, 50));
-            return metadata;
-        },
-
-        /**
-         * Compute stable pageId from URL and ServiceNow tab
+         * Compute pageId - ALWAYS look at active content, don't cache
          */
         computePageId() {
-            // Try URL-based identification first (most stable)
             const url = new URL(window.location.href);
-            const sysId = url.searchParams.get('sysparm_sys_id') || url.searchParams.get('sys_id');
             const path = url.pathname || '';
 
-            // Classic UI with sys_id in URL
-            if (sysId) {
-                return `${path}::${sysId}`;
+            // 1. Check URL params (classic UI)
+            const urlSysId = url.searchParams.get('sysparm_sys_id') || url.searchParams.get('sys_id');
+            if (urlSysId) {
+                return `${path}::${urlSysId}`;
             }
 
-            // Get metadata for the active tab
-            const metadata = this.getActiveTabMetadata();
+            // 2. Check ACTIVE content panel for record ID
+            const panel = this.getActiveContentPanel();
+            if (panel) {
+                // Look for sys_id input
+                const sysIdInput = panel.querySelector('input[name="sys_id"]') ||
+                                 AL.utils.querySelectorDeep('input[name="sys_id"]', panel);
 
-            if (metadata) {
-                // If we have a record ID, use it (most stable)
-                if (metadata.recordId) {
-                    return `${path}::${metadata.recordId}`;
+                if (sysIdInput && sysIdInput.value && sysIdInput.value !== '-1') {
+                    return `${path}::${sysIdInput.value}`;
                 }
-
-                // Otherwise use the stable tab ID
-                return `stable::${metadata.stableId}`;
             }
 
-            // Try to extract sys_id from iframe content (classic UI fallback)
-            const contentIframe = document.querySelector('iframe[name*="gsft"]');
-            if (contentIframe && contentIframe.contentWindow) {
-                try {
-                    const iframeUrl = contentIframe.contentWindow.location.href;
-                    const iframeSysId = new URL(iframeUrl).searchParams.get('sys_id');
-                    if (iframeSysId) {
-                        return `${path}::${iframeSysId}`;
-                    }
-                } catch (e) {
-                    // Cross-origin restriction, ignore
-                }
+            // 3. Use selected tab's ID as fallback
+            const selectedTab = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected');
+            if (selectedTab) {
+                const tabId = selectedTab.id || '';
+                const tabText = (selectedTab.textContent || '').trim().substring(0, 30);
+                return `${path}::tab_${tabId}_${tabText}`.replace(/[^a-z0-9_:]/gi, '_');
             }
 
             return 'default';
