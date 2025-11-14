@@ -1100,12 +1100,19 @@
         ticker: null,
         toast: null,
         stripLauncher: null,
+        // Drag state
+        isDragging: false,
+        dragStartX: 0,
+        dragStartY: 0,
+        panelStartX: 0,
+        panelStartY: 0,
 
         init() {
             this.loadSettings();
             this.injectStyles();
             this.createPanel();
             this.createTicker();
+            this.setupPanelDrag();
             console.log('[ui] Initialized');
         },
 
@@ -1116,6 +1123,30 @@
             const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
             this.dockMode = settings.dockMode || 'dock-right';
             this.currentTab = settings.currentTab || 'dashboard';
+
+            // Setup window resize handler to clamp floating panels
+            window.addEventListener('resize', AL.utils.debounce(() => {
+                if (this.panel && this.dockMode === 'float') {
+                    const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
+                    let x = settings.floatX || 100;
+                    let y = settings.floatY || 100;
+
+                    // Clamp to new viewport size
+                    const rect = this.panel.getBoundingClientRect();
+                    const maxX = window.innerWidth - rect.width;
+                    const maxY = window.innerHeight - rect.height;
+
+                    x = Math.max(0, Math.min(x, maxX));
+                    y = Math.max(0, Math.min(y, maxY));
+
+                    this.applyFloatPosition(x, y);
+
+                    // Save clamped position
+                    settings.floatX = x;
+                    settings.floatY = y;
+                    AL.persistence.set('settings', settings);
+                }
+            }, 250));
         },
 
         /**
@@ -1271,8 +1302,10 @@
                 }
                 .al-toast.top-right { top: 20px; right: 20px; }
                 .al-toast.top-left { top: 20px; left: 20px; }
+                .al-toast.top-center { top: 20px; left: 50%; transform: translateX(-50%); }
                 .al-toast.bottom-right { bottom: 20px; right: 20px; }
                 .al-toast.bottom-left { bottom: 20px; left: 20px; }
+                .al-toast.bottom-center { bottom: 20px; left: 50%; transform: translateX(-50%); }
                 .al-toast.success { background: #4CAF50; }
                 .al-toast.error { background: #f44336; }
                 .al-toast.warning { background: #ff9800; }
@@ -1485,12 +1518,133 @@
             // Attach to body
             document.body.appendChild(this.panel);
 
+            // Restore float position if in float mode
+            if (this.dockMode === 'float') {
+                const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
+                const x = settings.floatX || 100;
+                const y = settings.floatY || 100;
+                this.applyFloatPosition(x, y);
+            }
+
             // Event listeners
             document.getElementById('al-close').onclick = () => this.togglePanel();
             document.getElementById('al-minimize').onclick = () => this.togglePanel();
 
             // Render current tab
             this.renderTab(this.currentTab);
+        },
+
+        /**
+         * Setup panel drag behavior for docked → float conversion
+         */
+        setupPanelDrag() {
+            const header = document.getElementById('al-header');
+            if (!header) return;
+
+            header.style.cursor = 'move';
+
+            const onMouseDown = (e) => {
+                // Only drag from header, not from buttons
+                if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+
+                this.isDragging = true;
+                this.dragStartX = e.clientX;
+                this.dragStartY = e.clientY;
+
+                const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
+                const currentMode = settings.dockMode || this.dockMode;
+
+                // If currently docked, convert to float mode
+                if (currentMode !== 'float') {
+                    // Calculate a sensible starting position based on current dock
+                    let startLeft, startTop;
+                    if (currentMode === 'dock-left') {
+                        startLeft = 0;
+                        startTop = 100;
+                    } else if (currentMode === 'dock-right') {
+                        startLeft = window.innerWidth - 400;
+                        startTop = 100;
+                    } else { // dock-bottom
+                        startLeft = 100;
+                        startTop = window.innerHeight - 400;
+                    }
+
+                    // Update mode to float
+                    settings.dockMode = 'float';
+                    settings.floatX = startLeft;
+                    settings.floatY = startTop;
+                    AL.persistence.set('settings', settings);
+
+                    this.dockMode = 'float';
+                    this.panel.className = 'float';
+                    this.applyFloatPosition(startLeft, startTop);
+
+                    this.panelStartX = startLeft;
+                    this.panelStartY = startTop;
+                } else {
+                    // Already in float mode, get current position
+                    this.panelStartX = settings.floatX || 100;
+                    this.panelStartY = settings.floatY || 100;
+                }
+
+                e.preventDefault();
+            };
+
+            const onMouseMove = (e) => {
+                if (!this.isDragging) return;
+
+                const deltaX = e.clientX - this.dragStartX;
+                const deltaY = e.clientY - this.dragStartY;
+
+                const newX = this.panelStartX + deltaX;
+                const newY = this.panelStartY + deltaY;
+
+                this.applyFloatPosition(newX, newY);
+            };
+
+            const onMouseUp = (e) => {
+                if (!this.isDragging) return;
+
+                this.isDragging = false;
+
+                const deltaX = e.clientX - this.dragStartX;
+                const deltaY = e.clientY - this.dragStartY;
+
+                let finalX = this.panelStartX + deltaX;
+                let finalY = this.panelStartY + deltaY;
+
+                // Clamp to viewport
+                const rect = this.panel.getBoundingClientRect();
+                const maxX = window.innerWidth - rect.width;
+                const maxY = window.innerHeight - rect.height;
+
+                finalX = Math.max(0, Math.min(finalX, maxX));
+                finalY = Math.max(0, Math.min(finalY, maxY));
+
+                this.applyFloatPosition(finalX, finalY);
+
+                // Save position
+                const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
+                settings.floatX = finalX;
+                settings.floatY = finalY;
+                AL.persistence.set('settings', settings);
+            };
+
+            header.addEventListener('mousedown', onMouseDown);
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        },
+
+        /**
+         * Apply float position to panel
+         */
+        applyFloatPosition(x, y) {
+            if (!this.panel || this.panel.className !== 'float') return;
+
+            this.panel.style.left = x + 'px';
+            this.panel.style.top = y + 'px';
+            this.panel.style.right = 'auto';
+            this.panel.style.bottom = 'auto';
         },
 
         /**
@@ -1536,15 +1690,17 @@
                 // Get active page context (ensures ticker shows current page's data only)
                 const ctx = AL.pageState && AL.pageState.getActivePageContext ?
                     AL.pageState.getActivePageContext() :
-                    { type: null, userLast: null, vehicle: null, weapon: null, updatedOn: null };
+                    { type: null, userFull: null, userLast: null, vehicle: null, weapon: null, taser: null, patrol: null, updatedOn: null };
 
-                const typeValue = ctx.type || 'N/A';
-                const userValue = ctx.userLast || 'Unknown';
+                // Get asset field values (Type is NOT displayed as text, only as color)
+                const userValue = ctx.userFull || 'Unknown';
                 const vehicleValue = ctx.vehicle || '';
                 const weaponValue = ctx.weapon || '';
+                const taserValue = ctx.taser || '';
+                const patrolValue = ctx.patrol || '';
                 const prefixText = AL.prefixes.activePrefix ? `Prefix: ${AL.prefixes.activePrefix.label} (${AL.prefixes.activeStickyCount})` : '';
 
-                // Determine ticker styling using helper function
+                // Determine ticker styling using helper function (Type determines background color only)
                 const tickerStyle = AL.pageState && AL.pageState.deriveTickerStyle ?
                     AL.pageState.deriveTickerStyle(ctx) :
                     'default';
@@ -1574,12 +1730,14 @@
                 this.ticker.style.backgroundColor = bgColor;
                 this.ticker.style.color = textColor;
 
+                // Build ticker content with asset fields only (NO Type text)
                 this.ticker.innerHTML = `
                     <span style="display: flex; align-items: center;"><span class="al-ticker-status-dot ${modeDotClass}"></span></span>
-                    <span>Type: ${typeValue}</span>
-                    <span>User: ${userValue}</span>
-                    ${vehicleValue ? `<span>Vehicle: ${vehicleValue}</span>` : ''}
-                    ${weaponValue ? `<span>Weapon: ${weaponValue}</span>` : ''}
+                    <span>USER: ${userValue}</span>
+                    ${vehicleValue ? `<span>VEH: ${vehicleValue}</span>` : ''}
+                    ${weaponValue ? `<span>WPN: ${weaponValue}</span>` : ''}
+                    ${taserValue ? `<span>TASER: ${taserValue}</span>` : ''}
+                    ${patrolValue ? `<span>PATROL: ${patrolValue}</span>` : ''}
                     ${prefixText ? `<span style="color: ${prefixColor};">${prefixText}</span>` : ''}
                 `;
             } catch (error) {
@@ -1593,16 +1751,28 @@
         showToast(title, message, level = 'info', duration = 3000) {
             const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
             const position = settings.toastPosition || 'top-right';
+            const sticky = settings.toastSticky || false;
 
             const toast = document.createElement('div');
             toast.className = `al-toast ${position} ${level}`;
             toast.innerHTML = `<strong>${title}</strong><br>${message}`;
+            toast.style.cursor = 'pointer';
+
+            // Add click-to-close behavior
+            let timeoutId = null;
+            const closeToast = () => {
+                if (timeoutId) clearTimeout(timeoutId);
+                toast.remove();
+            };
+
+            toast.addEventListener('click', closeToast);
 
             document.body.appendChild(toast);
 
-            setTimeout(() => {
-                toast.remove();
-            }, duration);
+            // Auto-close after duration unless sticky
+            if (!sticky && duration > 0) {
+                timeoutId = setTimeout(closeToast, duration);
+            }
         },
 
         /**
@@ -2242,8 +2412,10 @@
                         <label>Toast Position</label>
                         <select class="al-input" id="al-setting-toast-position">
                             <option value="top-left" ${settings.toastPosition === 'top-left' ? 'selected' : ''}>Top Left</option>
+                            <option value="top-center" ${settings.toastPosition === 'top-center' ? 'selected' : ''}>Top Center</option>
                             <option value="top-right" ${settings.toastPosition === 'top-right' ? 'selected' : ''}>Top Right</option>
                             <option value="bottom-left" ${settings.toastPosition === 'bottom-left' ? 'selected' : ''}>Bottom Left</option>
+                            <option value="bottom-center" ${settings.toastPosition === 'bottom-center' ? 'selected' : ''}>Bottom Center</option>
                             <option value="bottom-right" ${settings.toastPosition === 'bottom-right' ? 'selected' : ''}>Bottom Right</option>
                         </select>
                     </div>
