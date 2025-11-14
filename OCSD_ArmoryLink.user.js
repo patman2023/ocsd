@@ -3556,8 +3556,9 @@
     // MODULE: TAB_TITLE
     // ========================================
     AL.tabTitle = {
-        // Browser tab title formatting (TYPE_ICON | LASTNAME)
-        originalTitle: document.title,
+        // ServiceNow workspace tab label formatting (TYPE_ICON | LASTNAME)
+        originalTitle: null,
+        originalTooltip: null,
         typeIcons: {
             'Deployment': '🟢',
             'Return': '🟡',
@@ -3565,15 +3566,47 @@
         },
 
         init() {
-            this.originalTitle = document.title;
+            // Store original tab label text
+            const tabLabel = this.getTabLabelElement();
+            if (tabLabel) {
+                this.originalTitle = tabLabel.textContent;
+                this.originalTooltip = tabLabel.getAttribute('data-tooltip');
+            }
             this.update();
             console.log('[tabTitle] Initialized');
         },
 
         /**
-         * Update browser tab title
+         * Get ServiceNow workspace tab label element
+         */
+        getTabLabelElement() {
+            // Try to find the active tab label in ServiceNow Workspace
+            // Use querySelectorDeep to pierce shadow DOM if needed
+            let tabLabel = AL.utils.querySelectorDeep('.sn-chrome-one-tab-label');
+
+            // Fallback: try to find the active/focused tab
+            if (!tabLabel) {
+                tabLabel = AL.utils.querySelectorDeep('.sn-chrome-one-tab.focused .sn-chrome-one-tab-label');
+            }
+
+            // Another fallback: try standard query selector
+            if (!tabLabel) {
+                tabLabel = document.querySelector('.sn-chrome-one-tab-label');
+            }
+
+            return tabLabel;
+        },
+
+        /**
+         * Update ServiceNow workspace tab label
          */
         update() {
+            const tabLabel = this.getTabLabelElement();
+            if (!tabLabel) {
+                console.warn('[tabTitle] Could not find ServiceNow tab label element');
+                return;
+            }
+
             const typeValue = AL.fields.getFieldValue('type');
             const userValue = AL.fields.getFieldValue('user');
 
@@ -3588,14 +3621,28 @@
             }
 
             // Format title
-            document.title = `${icon} | ${lastName}`;
+            const newTitle = `${icon} | ${lastName}`;
+
+            // Update the tab label text
+            tabLabel.textContent = newTitle;
+
+            // Update the tooltip as well
+            tabLabel.setAttribute('data-tooltip', newTitle);
+
+            console.log('[tabTitle] Updated tab label to:', newTitle);
         },
 
         /**
          * Reset to original title
          */
         reset() {
-            document.title = this.originalTitle;
+            const tabLabel = this.getTabLabelElement();
+            if (tabLabel && this.originalTitle) {
+                tabLabel.textContent = this.originalTitle;
+                if (this.originalTooltip) {
+                    tabLabel.setAttribute('data-tooltip', this.originalTooltip);
+                }
+            }
         }
     };
 
