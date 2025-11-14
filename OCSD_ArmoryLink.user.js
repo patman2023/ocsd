@@ -59,33 +59,61 @@
 
         /**
          * Query selector that pierces shadow DOM boundaries
+         * Prefers visible elements over hidden ones
          */
         querySelectorDeep(selector, root = document) {
             if (!selector) return null;
 
             try {
-                // First try normal query
-                let element = root.querySelector(selector);
-                if (element) return element;
+                // First collect all matches at the current level
+                const matches = root.querySelectorAll(selector);
+                if (matches.length > 0) {
+                    // Prefer visible matches
+                    for (const el of matches) {
+                        if (this.isElementVisible(el)) {
+                            return el;
+                        }
+                    }
+                    // If no visible matches, return the first match as fallback
+                    return matches[0];
+                }
 
-                // If not found, recursively search shadow roots and iframes
+                // If not found at current level, recursively search shadow roots and iframes
+                // Collect all matches from child contexts
+                const allMatches = [];
                 const allElements = root.querySelectorAll('*');
+
                 for (const el of allElements) {
                     // Search shadow DOM
                     if (el.shadowRoot) {
-                        element = this.querySelectorDeep(selector, el.shadowRoot);
-                        if (element) return element;
+                        const shadowMatch = this.querySelectorDeep(selector, el.shadowRoot);
+                        if (shadowMatch) {
+                            allMatches.push(shadowMatch);
+                        }
                     }
 
                     // Search same-origin iframes
                     if (el.tagName === 'IFRAME' && el.contentDocument) {
                         try {
-                            element = this.querySelectorDeep(selector, el.contentDocument);
-                            if (element) return element;
+                            const iframeMatch = this.querySelectorDeep(selector, el.contentDocument);
+                            if (iframeMatch) {
+                                allMatches.push(iframeMatch);
+                            }
                         } catch (e) {
                             // Ignore cross-origin iframes
                         }
                     }
+                }
+
+                // If we found matches in child contexts, prefer visible ones
+                if (allMatches.length > 0) {
+                    for (const match of allMatches) {
+                        if (this.isElementVisible(match)) {
+                            return match;
+                        }
+                    }
+                    // Fallback to first match if none are visible
+                    return allMatches[0];
                 }
 
                 return null;
@@ -248,6 +276,49 @@
             setTimeout(() => {
                 element.style.outline = originalOutline;
             }, duration);
+        },
+
+        /**
+         * Check if element is visible on the page
+         * Considers display, visibility, opacity, offsetParent, and aria-hidden
+         */
+        isElementVisible(el) {
+            if (!el) return false;
+
+            try {
+                // Quick checks for display and visibility
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity || '1') === 0) {
+                    return false;
+                }
+
+                // If offsetParent is null and it's not fixed/sticky, likely not visible in layout
+                if (el.offsetParent === null && style.position !== 'fixed' && style.position !== 'sticky') {
+                    return false;
+                }
+
+                // Walk up ancestors and check for hidden or aria-hidden elements
+                let current = el;
+                while (current && current !== document.body) {
+                    if (current.getAttribute && current.getAttribute('aria-hidden') === 'true') {
+                        return false;
+                    }
+                    // Also check parent for display/visibility
+                    if (current.parentElement) {
+                        const parentStyle = window.getComputedStyle(current.parentElement);
+                        if (parentStyle.display === 'none' || parentStyle.visibility === 'hidden') {
+                            return false;
+                        }
+                    }
+                    // Traverse up through regular DOM and shadow DOM
+                    current = current.parentElement || (current.getRootNode && current.getRootNode().host) || null;
+                }
+
+                return true;
+            } catch (error) {
+                console.error('[utils] isElementVisible error:', error);
+                return false;
+            }
         },
 
         /**
@@ -3501,6 +3572,15 @@
                 if (AL.ui && AL.ui.showToast) {
                     AL.ui.showToast('Test Failed', `Element not found: ${field.selector}`, 'error');
                 }
+                return false;
+            }
+
+            // Check if element is visible
+            if (!AL.utils.isElementVisible(element)) {
+                if (AL.ui && AL.ui.showToast) {
+                    AL.ui.showToast('Test Failed', 'Field was found but is not visible on this subpage.', 'warning');
+                }
+                console.log('[fields] testField: Element found but not visible:', field.selector, element);
                 return false;
             }
 
