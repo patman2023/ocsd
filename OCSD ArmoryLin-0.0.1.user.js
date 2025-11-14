@@ -179,31 +179,36 @@ const LayoutEngine = (() => {
 
     /**
      * Get layout configurations
+     * topGap applies ONLY to dock-right and left-strip modes
      */
     function getLayoutConfig(layout) {
+        // Get topGap from settings
+        const settings = window.OCSDArmoryLink?.settings;
+        const topGap = settings?.get('topGap') || 0;
+
         const configs = {
             [LAYOUTS.DOCK_RIGHT]: {
                 position: 'fixed',
-                top: '0',
+                top: `${topGap}px`,
                 right: '0',
                 bottom: '0',
                 left: 'auto',
                 width: '400px',
-                height: '100vh',
-                maxHeight: '100vh',
+                height: topGap > 0 ? `calc(100vh - ${topGap}px)` : '100vh',
+                maxHeight: topGap > 0 ? `calc(100vh - ${topGap}px)` : '100vh',
                 transform: 'none',
                 borderRadius: '0',
                 boxShadow: '-2px 0 8px rgba(0,0,0,0.1)'
             },
             [LAYOUTS.LEFT_STRIP]: {
                 position: 'fixed',
-                top: '0',
+                top: `${topGap}px`,
                 left: '0',
                 bottom: '0',
                 right: 'auto',
                 width: '80px',
-                height: '100vh',
-                maxHeight: '100vh',
+                height: topGap > 0 ? `calc(100vh - ${topGap}px)` : '100vh',
+                maxHeight: topGap > 0 ? `calc(100vh - ${topGap}px)` : '100vh',
                 transform: 'none',
                 borderRadius: '0',
                 boxShadow: '2px 0 8px rgba(0,0,0,0.1)'
@@ -246,7 +251,9 @@ const LayoutEngine = (() => {
         if (!element) return false;
 
         if (!Object.values(LAYOUTS).includes(layout)) {
-            console.warn('[LayoutEngine] Invalid layout:', layout);
+            if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                window.OCSDArmoryLink.stubs.debugLog('warn', 'layout', 'Invalid layout', { layout });
+            }
             return false;
         }
 
@@ -966,8 +973,10 @@ const StubsModule = (() => {
                 }
             }
 
-            // Console log for debugging
-            console.log(`[TOAST][${type}] ${icons[type]} ${message}`);
+            // Debug log for toast creation
+            if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                window.OCSDArmoryLink.stubs.debugLog('info', 'toast', `Toast created: ${message}`, { type, duration: opts.duration });
+            }
 
             return toastId;
         }
@@ -1058,6 +1067,10 @@ const CaptureModule = (() => {
     let keyBuffer = '';
     let keyTimer = null;
     let recentScans = []; // For duplicate detection: [{scan, timestamp}]
+
+    // NOTE: offlineQueue and retrySec settings are defined and read from config,
+    // but full retry logic for offline context is not yet implemented.
+    // Future enhancement: check ActiveContextModule and implement retry mechanism.
 
     // Configuration - loaded from settings
     function getConfig() {
@@ -2171,7 +2184,9 @@ const ElementsModule = (() => {
             element.focus();
             return true;
         } catch (err) {
-            console.error('[Elements] Focus error:', err);
+            if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                window.OCSDArmoryLink.stubs.debugLog('error', 'elements', 'Focus error', { error: err.message });
+            }
             return false;
         }
     }
@@ -2307,7 +2322,9 @@ const RulesEngine = (() => {
                         };
                     }
                 } catch (e) {
-                    console.error("Invalid regex pattern:", pattern, e);
+                    if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                        window.OCSDArmoryLink.stubs.debugLog('error', 'rules', 'Invalid regex pattern', { pattern, error: e.message });
+                    }
                 }
                 return null;
 
@@ -2352,7 +2369,9 @@ const RulesEngine = (() => {
                 return null;
 
             default:
-                console.warn("Unknown pattern type:", patternType);
+                if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                    window.OCSDArmoryLink.stubs.debugLog('warn', 'rules', 'Unknown pattern type', { patternType });
+                }
                 return null;
         }
     }
@@ -2493,7 +2512,9 @@ const RulesEngine = (() => {
                     break;
 
                 default:
-                    console.warn("Unknown action type:", action.type);
+                    if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                        window.OCSDArmoryLink.stubs.debugLog('warn', 'rules', 'Unknown action type', { actionType: action.type });
+                    }
             }
         });
 
@@ -7771,12 +7792,16 @@ const MacrosModule = (() => {
         const macro = macros.find(m => m.id === macroId);
 
         if (!macro) {
-            console.error(`[Macros] Macro not found: ${macroId}`);
+            if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                window.OCSDArmoryLink.stubs.debugLog('error', 'macros', 'Macro not found', { macroId });
+            }
             return { success: false, error: 'Macro not found' };
         }
 
         if (!macro.enabled) {
-            console.warn(`[Macros] Macro is disabled: ${macroId}`);
+            if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                window.OCSDArmoryLink.stubs.debugLog('warn', 'macros', 'Macro is disabled', { macroId });
+            }
             return { success: false, error: 'Macro is disabled' };
         }
 
@@ -7802,7 +7827,9 @@ const MacrosModule = (() => {
                     await new Promise(resolve => setTimeout(resolve, action.delay));
                 }
             } catch (err) {
-                console.error(`[Macros] Action failed:`, err);
+                if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                    window.OCSDArmoryLink.stubs.debugLog('error', 'macros', 'Macro action failed', { action: action.type, error: err.message });
+                }
                 results.push({ action, error: err.message, success: false });
                 success = false;
 
@@ -8109,7 +8136,9 @@ const FieldsModule = (() => {
             if (customFields && typeof customFields === 'object') {
                 // Merge custom fields with defaults
                 fieldDefinitions = { ...defaultFieldDefinitions, ...customFields };
-                console.log('[Fields] Loaded custom field mappings from persistence');
+                if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                    window.OCSDArmoryLink.stubs.debugLog('info', 'fields', 'Loaded custom field mappings from persistence', { count: Object.keys(customFields).length });
+                }
             }
         }
 
@@ -8410,9 +8439,10 @@ const BWCModule = (() => {
      * @param {string} type - Type: "info", "error", "success"
      */
     function showToast(message, type = 'info') {
-        // Simple console log for now - can be enhanced with actual toast UI later
-        const prefix = type === 'error' ? '❌' : type === 'success' ? '✓' : 'ℹ️';
-        console.log(`${prefix} ${message}`);
+        // Use debug logging instead of console
+        if (window.OCSDArmoryLink?.stubs?.debugLog) {
+            window.OCSDArmoryLink.stubs.debugLog(type === 'error' ? 'error' : 'info', 'bwc', message);
+        }
     }
 
     /**
@@ -8444,7 +8474,9 @@ const BWCModule = (() => {
         // Check if PID is empty
         if (!pid || pid.trim() === '') {
             showToast('Cannot open BWC — User field is empty', 'error');
-            console.error('BWC: Cannot open - User field is empty');
+            if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                window.OCSDArmoryLink.stubs.debugLog('error', 'bwc', 'Cannot open - User field is empty');
+            }
             return;
         }
 
@@ -8542,9 +8574,10 @@ const X10Module = (() => {
      * @param {string} type - Type: "info", "error", "success"
      */
     function showToast(message, type = 'info') {
-        // Simple console log for now - can be enhanced with actual toast UI later
-        const prefix = type === 'error' ? '❌' : type === 'success' ? '✓' : 'ℹ️';
-        console.log(`${prefix} ${message}`);
+        // Use debug logging instead of console
+        if (window.OCSDArmoryLink?.stubs?.debugLog) {
+            window.OCSDArmoryLink.stubs.debugLog(type === 'error' ? 'error' : 'info', 'x10', message);
+        }
     }
 
     /**
@@ -8576,7 +8609,9 @@ const X10Module = (() => {
         // Check if PID is empty
         if (!pid || pid.trim() === '') {
             showToast('Cannot open X10 — User field is empty', 'error');
-            console.error('X10: Cannot open - User field is empty');
+            if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                window.OCSDArmoryLink.stubs.debugLog('error', 'x10', 'Cannot open - User field is empty');
+            }
             return;
         }
 
@@ -8768,7 +8803,9 @@ const ActiveContextModule = (() => {
                 try {
                     callback(change);
                 } catch (err) {
-                    console.error('[ActiveContext] Observer error:', err);
+                    if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                        window.OCSDArmoryLink.stubs.debugLog('error', 'context', 'Observer error', { error: err.message });
+                    }
                 }
             }
         });
@@ -9371,7 +9408,9 @@ const SettingsCatalog = (() => {
                 try {
                     callback(key, newValue, oldValue);
                 } catch (err) {
-                    console.error('[SettingsCatalog] Listener error:', err);
+                    if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                        window.OCSDArmoryLink.stubs.debugLog('error', 'settings', 'Listener callback error', { key, error: err.message });
+                    }
                 }
             }
         });
@@ -9395,6 +9434,15 @@ const SettingsCatalog = (() => {
             case 'theme':
                 AL.theme?.setTheme(value);
                 AL.theme?.injectThemeStyles();
+                break;
+
+            case 'topGap':
+                // Re-apply current layout to use new topGap value
+                // topGap only affects dock-right and left-strip layouts
+                if (AL.layout) {
+                    const currentLayout = AL.layout.getLayout();
+                    AL.layout.setLayout(currentLayout);
+                }
                 break;
 
             case 'enableTicker':
@@ -9506,7 +9554,9 @@ const BroadcastModule = (() => {
                         'BroadcastChannel initialized');
                 }
             } catch (e) {
-                console.warn('[Broadcast] BroadcastChannel failed, using localStorage fallback', e);
+                if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                    window.OCSDArmoryLink.stubs.debugLog('warn', 'broadcast', 'BroadcastChannel failed, using localStorage fallback', { error: e.message });
+                }
                 initFallback();
             }
         } else {
@@ -9527,7 +9577,9 @@ const BroadcastModule = (() => {
                     const message = JSON.parse(e.newValue);
                     handleMessage({ data: message });
                 } catch (err) {
-                    console.error('[Broadcast] Failed to parse storage message', err);
+                    if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                        window.OCSDArmoryLink.stubs.debugLog('error', 'broadcast', 'Failed to parse storage message', { error: err.message });
+                    }
                 }
             }
         });
@@ -9551,7 +9603,9 @@ const BroadcastModule = (() => {
             try {
                 callback(message);
             } catch (err) {
-                console.error('[Broadcast] Listener error:', err);
+                if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                    window.OCSDArmoryLink.stubs.debugLog('error', 'broadcast', 'Listener callback error', { error: err.message, messageType: message.type });
+                }
             }
         });
 
@@ -9587,14 +9641,18 @@ const BroadcastModule = (() => {
                     }
                 }, 50);
             } catch (err) {
-                console.error('[Broadcast] Failed to send via localStorage', err);
+                if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                    window.OCSDArmoryLink.stubs.debugLog('error', 'broadcast', 'Failed to send via localStorage', { error: err.message, type });
+                }
             }
         } else if (channel) {
             // Use BroadcastChannel
             try {
                 channel.postMessage(message);
             } catch (err) {
-                console.error('[Broadcast] Failed to send via BroadcastChannel', err);
+                if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                    window.OCSDArmoryLink.stubs.debugLog('error', 'broadcast', 'Failed to send via BroadcastChannel', { error: err.message, type });
+                }
             }
         }
     }
@@ -9629,6 +9687,13 @@ const BroadcastModule = (() => {
 
     /**
      * Leader Election System
+     *
+     * NOTE: This implementation uses localStorage + BroadcastChannel for leader election
+     * and heartbeat, replacing the original spec's GM_lock-based approach. This provides
+     * cross-tab coordination without requiring Greasemonkey-specific APIs.
+     *
+     * Only the leader tab processes scans from the capture queue to prevent duplicate
+     * processing across multiple open tabs.
      */
 
     /**
@@ -9659,7 +9724,9 @@ const BroadcastModule = (() => {
                     'Became leader tab', { tabId });
             }
         } catch (err) {
-            console.error('[Broadcast] Failed to become leader:', err);
+            if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                window.OCSDArmoryLink.stubs.debugLog('error', 'broadcast', 'Failed to become leader', { error: err.message });
+            }
         }
     }
 
@@ -9679,7 +9746,9 @@ const BroadcastModule = (() => {
             localStorage.setItem(LEADER_KEY, JSON.stringify(leaderInfo));
             send('leader:heartbeat', { tabId });
         } catch (err) {
-            console.error('[Broadcast] Failed to send heartbeat:', err);
+            if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                window.OCSDArmoryLink.stubs.debugLog('error', 'broadcast', 'Failed to send heartbeat', { error: err.message });
+            }
         }
     }
 
@@ -9727,7 +9796,9 @@ const BroadcastModule = (() => {
                 }
             }
         } catch (err) {
-            console.error('[Broadcast] Leader check error:', err);
+            if (window.OCSDArmoryLink?.stubs?.debugLog) {
+                window.OCSDArmoryLink.stubs.debugLog('error', 'broadcast', 'Leader check error', { error: err.message });
+            }
         }
     }
 
@@ -10380,7 +10451,10 @@ const InitModule = (() => {
         const AL = window.OCSDArmoryLink;
 
         if (!AL) {
-            console.error('[ArmoryLink] Global namespace not found');
+            // Cannot use debugLog here as AL is not available
+            if (console && console.error) {
+                console.error('[ArmoryLink] FATAL: Global namespace not found');
+            }
             return;
         }
 
@@ -10436,7 +10510,9 @@ const InitModule = (() => {
         const defaults = AL.defaultsManager?.getDefaults();
 
         if (!defaults) {
-            console.error('[ArmoryLink] Failed to load defaults');
+            if (AL.stubs?.debugLog) {
+                AL.stubs.debugLog('error', 'init', 'Failed to load defaults');
+            }
             return;
         }
 
