@@ -136,8 +136,11 @@
         /**
          * Find element by CSS selector with optional iframe/shadow DOM path
          * Uses deep query by default for shadow DOM piercing
+         * @param {string} selector - CSS selector
+         * @param {Array} selectorPath - Optional path through iframes/shadow DOM
+         * @param {Document|Element} scopeRoot - Optional root to scope search (defaults to active page root)
          */
-        findElement(selector, selectorPath) {
+        findElement(selector, selectorPath, scopeRoot) {
             if (!selector) return null;
 
             try {
@@ -149,13 +152,18 @@
             }
 
             try {
+                // If scopeRoot not provided, use active page root
+                if (!scopeRoot) {
+                    scopeRoot = this.getActivePageRoot();
+                }
+
                 // If no path, use deep query to pierce shadow DOM
                 if (!selectorPath || selectorPath.length === 0) {
-                    return this.querySelectorDeep(selector);
+                    return this.querySelectorDeep(selector, scopeRoot);
                 }
 
                 // Walk through path (iframes, shadow roots)
-                let context = document;
+                let context = scopeRoot;
                 for (const step of selectorPath) {
                     if (step.type === 'iframe') {
                         const iframe = context.querySelector(step.selector);
@@ -276,6 +284,49 @@
             const div = document.createElement('div');
             div.textContent = str;
             return div.innerHTML;
+        },
+
+        /**
+         * Get the root element for the currently active page/tab
+         * This ensures field operations target the correct tab in multi-tab scenarios
+         */
+        getActivePageRoot() {
+            try {
+                // Method 1: Find the selected tab and its corresponding panel
+                const selectedTab = this.querySelectorDeep('.sn-chrome-one-tab.is-selected');
+                if (selectedTab) {
+                    // Get the tab ID to find corresponding panel
+                    const tabId = selectedTab.getAttribute('id') || selectedTab.getAttribute('aria-controls');
+                    if (tabId) {
+                        const panel = document.querySelector(`#${tabId}-panel`) ||
+                                     document.querySelector(`[aria-labelledby="${tabId}"]`) ||
+                                     document.querySelector(`[data-tab-id="${tabId}"]`);
+                        if (panel) return panel;
+                    }
+                }
+
+                // Method 2: Look for active/visible tab panel by aria-selected or visible state
+                const activePanel = this.querySelectorDeep('[role="tabpanel"][aria-hidden="false"]') ||
+                                   this.querySelectorDeep('[role="tabpanel"]:not([aria-hidden="true"])') ||
+                                   this.querySelectorDeep('.sn-chrome-one-tab-panel.is-active') ||
+                                   this.querySelectorDeep('.sn-chrome-one-tab-panel:not(.is-hidden)');
+                if (activePanel) return activePanel;
+
+                // Method 3: Fallback to iframe content (older ServiceNow or single-tab)
+                const mainIframe = document.querySelector('iframe[name="gsft_main"]') ||
+                                  document.querySelector('iframe.gsft_main') ||
+                                  this.querySelectorDeep('iframe[id*="frame"]');
+                if (mainIframe && mainIframe.contentDocument) {
+                    return mainIframe.contentDocument;
+                }
+
+                // Method 4: Last resort - return document (search entire page)
+                console.warn('[utils] Could not find active page root, searching entire document');
+                return document;
+            } catch (error) {
+                console.error('[utils] Error finding active page root:', error);
+                return document;
+            }
         },
 
         init() {
