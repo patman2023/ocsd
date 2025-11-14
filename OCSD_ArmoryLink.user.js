@@ -58,15 +58,78 @@
         },
 
         /**
+         * Query selector that pierces shadow DOM boundaries
+         */
+        querySelectorDeep(selector, root = document) {
+            if (!selector) return null;
+
+            try {
+                // First try normal query
+                let element = root.querySelector(selector);
+                if (element) return element;
+
+                // If not found, recursively search shadow roots
+                const allElements = root.querySelectorAll('*');
+                for (const el of allElements) {
+                    if (el.shadowRoot) {
+                        element = this.querySelectorDeep(selector, el.shadowRoot);
+                        if (element) return element;
+                    }
+                }
+
+                return null;
+            } catch (error) {
+                console.error('[utils] querySelectorDeep error:', error);
+                return null;
+            }
+        },
+
+        /**
+         * Query all selectors that pierce shadow DOM boundaries
+         */
+        querySelectorAllDeep(selector, root = document) {
+            const results = [];
+
+            try {
+                // Add results from current level
+                const elements = root.querySelectorAll(selector);
+                results.push(...elements);
+
+                // Recursively search shadow roots
+                const allElements = root.querySelectorAll('*');
+                for (const el of allElements) {
+                    if (el.shadowRoot) {
+                        const shadowResults = this.querySelectorAllDeep(selector, el.shadowRoot);
+                        results.push(...shadowResults);
+                    }
+                }
+
+                return results;
+            } catch (error) {
+                console.error('[utils] querySelectorAllDeep error:', error);
+                return results;
+            }
+        },
+
+        /**
          * Find element by CSS selector with optional iframe/shadow DOM path
+         * Uses deep query by default for shadow DOM piercing
          */
         findElement(selector, selectorPath) {
             if (!selector) return null;
 
             try {
-                // If no path, simple query
+                // Validate selector first
+                document.createDocumentFragment().querySelector(selector);
+            } catch (error) {
+                console.error('[utils] Invalid selector:', selector, error);
+                return null;
+            }
+
+            try {
+                // If no path, use deep query to pierce shadow DOM
                 if (!selectorPath || selectorPath.length === 0) {
-                    return document.querySelector(selector);
+                    return this.querySelectorDeep(selector);
                 }
 
                 // Walk through path (iframes, shadow roots)
@@ -83,7 +146,7 @@
                     }
                 }
 
-                return context.querySelector(selector);
+                return this.querySelectorDeep(selector, context);
             } catch (error) {
                 console.error('[utils] findElement error:', error);
                 return null;
@@ -196,23 +259,25 @@
 
         /**
          * Get default field configurations
+         * Updated to match actual ServiceNow Workspace DOM structure
          */
         getDefaultFields() {
             return [
                 {
                     key: 'type',
                     label: 'Type',
-                    selector: '#type_select', // Placeholder - user will refine
+                    // Type field is in shadow DOM - combobox trigger button
+                    selector: "button[role='combobox'][aria-label='Type']",
                     selectorPath: [],
                     kind: 'field',
                     roles: ['read', 'write', 'ticker'],
-                    commitEvent: 'change',
+                    commitEvent: 'click',
                     enabled: true
                 },
                 {
                     key: 'user',
                     label: 'User',
-                    selector: '#user_input', // Placeholder
+                    selector: "input[aria-label='User']",
                     selectorPath: [],
                     kind: 'field',
                     roles: ['read', 'write', 'ticker'],
@@ -221,81 +286,82 @@
                 },
                 {
                     key: 'externalContact',
-                    label: 'External Contact',
-                    selector: '#external_contact', // Placeholder
+                    label: 'External Loan',
+                    selector: "input[aria-label='External Loan']",
                     selectorPath: [],
                     kind: 'field',
-                    roles: ['write'],
+                    roles: ['read', 'write'],
                     commitEvent: 'change',
                     enabled: true
                 },
                 {
                     key: 'department',
                     label: 'Department',
-                    selector: '#department_select', // Placeholder
+                    // Department field not visible on current form
+                    selector: '',
                     selectorPath: [],
                     kind: 'field',
                     roles: ['write'],
                     commitEvent: 'change',
-                    enabled: true
+                    enabled: false
                 },
                 {
                     key: 'vehicle',
                     label: 'Vehicle',
-                    selector: '#vehicle_input', // Placeholder
+                    selector: "input[aria-label='Vehicle Asset']",
                     selectorPath: [],
                     kind: 'field',
-                    roles: ['write', 'ticker'],
-                    commitEvent: 'blur',
+                    roles: ['read', 'write', 'ticker'],
+                    commitEvent: 'change',
                     enabled: true
                 },
                 {
                     key: 'weapon',
                     label: 'Weapon',
-                    selector: '#weapon_input', // Placeholder
+                    selector: "input[aria-label='Weapon Asset']",
                     selectorPath: [],
                     kind: 'field',
-                    roles: ['write', 'ticker'],
-                    commitEvent: 'blur',
+                    roles: ['read', 'write', 'ticker'],
+                    commitEvent: 'change',
                     enabled: true
                 },
                 {
                     key: 'taser',
                     label: 'Taser',
-                    selector: '#taser_input', // Placeholder
+                    selector: "input[aria-label='Taser Asset']",
                     selectorPath: [],
                     kind: 'field',
-                    roles: ['write', 'ticker'],
-                    commitEvent: 'blur',
+                    roles: ['read', 'write', 'ticker'],
+                    commitEvent: 'change',
                     enabled: true
                 },
                 {
                     key: 'patrol',
                     label: 'Patrol',
-                    selector: '#patrol_input', // Placeholder
+                    selector: "input[aria-label='Patrol Assets']",
                     selectorPath: [],
                     kind: 'field',
-                    roles: ['write'],
-                    commitEvent: 'blur',
+                    roles: ['read', 'write'],
+                    commitEvent: 'change',
                     enabled: true
                 },
                 {
                     key: 'controlOneRadio',
                     label: 'Control One Radio',
-                    selector: '#radio_input', // Placeholder
+                    selector: "input[aria-label='Control One Radio']",
                     selectorPath: [],
                     kind: 'field',
-                    roles: ['write', 'ticker'],
-                    commitEvent: 'blur',
+                    roles: ['read', 'write', 'ticker'],
+                    commitEvent: 'change',
                     enabled: true
                 },
                 {
                     key: 'comments',
                     label: 'Comments',
-                    selector: '#comments_textarea', // Placeholder
+                    selector: "textarea[name='comments']",
                     selectorPath: [],
                     kind: 'field',
-                    roles: ['write'],
+                    roles: ['read', 'write'],
                     commitEvent: 'blur',
                     enabled: true
                 }
@@ -320,7 +386,7 @@
                         {
                             type: 'setField',
                             field: 'user',
-                            value: '${group1}' // The PID
+                            value: '${group2}' // The PID (group 2 in the regex)
                         },
                         {
                             type: 'setType',
@@ -1889,7 +1955,32 @@
             }
 
             try {
-                // Set value based on element type
+                // Special handling for Type field (combobox in shadow DOM)
+                if (key === 'type' && element.getAttribute('role') === 'combobox') {
+                    // Click to open dropdown
+                    element.click();
+
+                    // Wait for dropdown to open, then find and click the option
+                    setTimeout(() => {
+                        // Find the dropdown list item matching the value
+                        const options = AL.utils.querySelectorAllDeep('[role="option"]');
+                        const matchingOption = Array.from(options).find(opt => {
+                            const text = opt.textContent?.trim();
+                            return text === value || text.toLowerCase() === value.toLowerCase();
+                        });
+
+                        if (matchingOption) {
+                            matchingOption.click();
+                            console.log('[fields] Set Type field to:', value);
+                        } else {
+                            console.warn('[fields] Option not found for Type:', value);
+                        }
+                    }, 100);
+
+                    return true;
+                }
+
+                // Standard handling for other fields
                 if (element.tagName === 'SELECT') {
                     // Try to find option by value or text
                     const option = Array.from(element.options).find(opt =>
@@ -1933,10 +2024,24 @@
             if (!element) return null;
 
             try {
+                // Special handling for Type field (combobox in shadow DOM)
+                if (key === 'type' && element.getAttribute('role') === 'combobox') {
+                    // Get the displayed text from the trigger button
+                    const labelElement = element.querySelector('.now-select-trigger-label');
+                    if (labelElement) {
+                        return labelElement.textContent?.trim() || null;
+                    }
+                    // Fallback to aria-label or button text
+                    return element.textContent?.trim() || element.getAttribute('aria-label') || null;
+                }
+
+                // Standard handling for other fields
                 if (element.tagName === 'SELECT') {
                     return element.options[element.selectedIndex]?.text || element.value;
                 } else if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
                     return element.value;
+                } else if (element.tagName === 'BUTTON') {
+                    return element.textContent?.trim() || null;
                 } else {
                     return element.textContent;
                 }
