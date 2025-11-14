@@ -3829,9 +3829,159 @@
         // Per-page context store for ServiceNow Workspace tabs
         pages: {},         // Map of pageId -> context object
         activePageId: null,  // Currently active page ID
+        tabRegistry: new WeakMap(),  // Map tab DOM elements to their stable IDs
+        tabToPageId: {},     // Map stable tab IDs to page IDs
+        observingTabs: false, // Flag to track if we're observing tabs
 
         init() {
             console.log('[pageState] Initialized');
+            this.startTabMonitoring();
+        },
+
+        /**
+         * Start monitoring tabs for creation/deletion/reordering
+         */
+        startTabMonitoring() {
+            if (this.observingTabs) return;
+            this.observingTabs = true;
+
+            // Initial scan of existing tabs
+            this.scanAndRegisterTabs();
+
+            // Set up MutationObserver to watch for tab changes
+            const tabContainer = AL.utils.querySelectorDeep('.sn-chrome-tabs-group') ||
+                               AL.utils.querySelectorDeep('[role="tablist"]');
+
+            if (tabContainer) {
+                const observer = new MutationObserver((mutations) => {
+                    let shouldRescan = false;
+
+                    for (const mutation of mutations) {
+                        // Check if tabs were added or removed
+                        if (mutation.type === 'childList' &&
+                            (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)) {
+                            shouldRescan = true;
+                            break;
+                        }
+                    }
+
+                    if (shouldRescan) {
+                        console.log('[pageState] Tab structure changed, rescanning tabs');
+                        this.scanAndRegisterTabs();
+                    }
+                });
+
+                observer.observe(tabContainer, {
+                    childList: true,
+                    subtree: true
+                });
+
+                console.log('[pageState] Tab monitoring active');
+            } else {
+                // Retry after a delay if tab container not found yet
+                setTimeout(() => {
+                    this.observingTabs = false;
+                    this.startTabMonitoring();
+                }, 2000);
+            }
+        },
+
+        /**
+         * Scan all tabs and register them with stable IDs
+         */
+        scanAndRegisterTabs() {
+            const tabs = AL.utils.querySelectorAllDeep('.sn-chrome-one-tab') ||
+                        AL.utils.querySelectorAllDeep('[role="tab"]') ||
+                        [];
+
+            console.log('[pageState] Scanning', tabs.length, 'tabs');
+
+            tabs.forEach(tab => {
+                // Check if this tab already has a stable ID registered
+                let stableId = this.tabRegistry.get(tab);
+
+                if (!stableId) {
+                    // Try to get existing data-al-stable-id
+                    stableId = tab.getAttribute('data-al-stable-id');
+
+                    if (!stableId) {
+                        // Generate new stable ID
+                        stableId = AL.utils.generateId();
+                        tab.setAttribute('data-al-stable-id', stableId);
+                        console.log('[pageState] Assigned new stable ID to tab:', stableId);
+                    }
+
+                    // Register in WeakMap
+                    this.tabRegistry.set(tab, stableId);
+                }
+
+                // Try to get the record sys_id or other identifier from the tab's content
+                const recordId = this.extractRecordIdFromTab(tab);
+                if (recordId) {
+                    // Associate the stable tab ID with the record ID
+                    this.tabToPageId[stableId] = recordId;
+                    console.log('[pageState] Associated stable ID', stableId, 'with record', recordId);
+                }
+            });
+        },
+
+        /**
+         * Extract record ID from a tab's associated content
+         */
+        extractRecordIdFromTab(tab) {
+            const tabId = tab.id ||
+                         tab.getAttribute('data-tab-id') ||
+                         tab.getAttribute('aria-controls');
+
+            if (!tabId) return null;
+
+            // Try to find the associated content panel
+            const contentPanel = document.getElementById(tabId) ||
+                               AL.utils.querySelectorDeep(`[id="${tabId}"]`) ||
+                               AL.utils.querySelectorDeep(`[aria-labelledby="${tabId}"]`);
+
+            if (!contentPanel) return null;
+
+            // Look for sys_id or unique record identifier in the content
+            const recordInput = contentPanel.querySelector('input[name="sys_id"]') ||
+                              contentPanel.querySelector('[data-record-id]');
+
+            if (recordInput) {
+                const recordId = recordInput.value || recordInput.getAttribute('data-record-id');
+                if (recordId && recordId !== '-1') {
+                    return recordId;
+                }
+            }
+
+            return null;
+        },
+
+        /**
+         * Get stable ID for the currently selected tab
+         */
+        getActiveTabStableId() {
+            const tabElement = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected') ||
+                               AL.utils.querySelectorDeep('[role="tab"][aria-selected="true"]');
+
+            if (!tabElement) return null;
+
+            // Check WeakMap first
+            let stableId = this.tabRegistry.get(tabElement);
+
+            if (!stableId) {
+                // Try to get from attribute
+                stableId = tabElement.getAttribute('data-al-stable-id');
+
+                if (!stableId) {
+                    // Generate and register new stable ID
+                    stableId = AL.utils.generateId();
+                    tabElement.setAttribute('data-al-stable-id', stableId);
+                    this.tabRegistry.set(tabElement, stableId);
+                    console.log('[pageState] Created stable ID for active tab:', stableId);
+                }
+            }
+
+            return stableId;
         },
 
         /**
@@ -3848,44 +3998,32 @@
                 return `${path}::${sysId}`;
             }
 
-            // For Loaner Workspace, find the selected tab and extract its unique identifier
-            const tabElement = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected') ||
-                               AL.utils.querySelectorDeep('[role="tab"][aria-selected="true"]');
+            // Get the stable ID for the active tab
+            const stableTabId = this.getActiveTabStableId();
 
-            if (tabElement) {
-                // Try to get tab's unique ID from various attributes
-                const tabId = tabElement.id ||
-                             tabElement.getAttribute('data-tab-id') ||
-                             tabElement.getAttribute('aria-controls');
+            if (stableTabId) {
+                // Check if we have a record ID associated with this stable tab ID
+                const recordId = this.tabToPageId[stableTabId];
 
-                if (tabId) {
-                    // Try to find the associated content panel and extract record info
-                    const contentPanel = document.getElementById(tabId) ||
-                                       AL.utils.querySelectorDeep(`[id="${tabId}"]`) ||
-                                       AL.utils.querySelectorDeep(`[aria-labelledby="${tabId}"]`);
+                if (recordId) {
+                    return `${path}::${recordId}`;
+                }
 
-                    if (contentPanel) {
-                        // Look for sys_id or unique record identifier in the content
-                        const recordInput = contentPanel.querySelector('input[name="sys_id"]') ||
-                                          contentPanel.querySelector('[data-record-id]');
+                // Otherwise, try to extract record ID from the current tab
+                const tabElement = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected') ||
+                                   AL.utils.querySelectorDeep('[role="tab"][aria-selected="true"]');
 
-                        if (recordInput) {
-                            const recordId = recordInput.value || recordInput.getAttribute('data-record-id');
-                            if (recordId && recordId !== '-1') {
-                                return `${path}::${recordId}`;
-                            }
-                        }
+                if (tabElement) {
+                    const extractedRecordId = this.extractRecordIdFromTab(tabElement);
+                    if (extractedRecordId) {
+                        // Store the association
+                        this.tabToPageId[stableTabId] = extractedRecordId;
+                        return `${path}::${extractedRecordId}`;
                     }
-
-                    // Use tab ID as stable identifier
-                    return `${path}::tab-${tabId}`;
                 }
 
-                // Fallback: Use or create a per-tab unique ID
-                if (!tabElement.dataset.alPageId) {
-                    tabElement.dataset.alPageId = AL.utils.generateId();
-                }
-                return tabElement.dataset.alPageId;
+                // Use the stable tab ID itself as the page ID
+                return `stable::${stableTabId}`;
             }
 
             // Try to extract sys_id from iframe content (classic UI fallback)
