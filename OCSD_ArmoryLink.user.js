@@ -1528,6 +1528,15 @@
         updateTicker() {
             if (!this.ticker) return;
 
+            // NEW: ensure the pageState cache is fresh for the active page
+            if (AL.pageState && typeof AL.pageState.readFieldsAndUpdate === 'function') {
+                try {
+                    AL.pageState.readFieldsAndUpdate();
+                } catch (e) {
+                    console.error('[ArmoryLink] Error updating pageState before ticker refresh', e);
+                }
+            }
+
             try {
                 // Get mode and determine dot class
                 const mode = AL.capture.mode;
@@ -3706,7 +3715,7 @@
             // User can refine this later
             if (!this.isArmoryContext) {
                 // For testing, allow all ServiceNow pages
-                this.isArmoryContext = url.includes('service-now.com');
+                this.isArmoryContext = url.includes('servicenowservices.com');
             }
 
             return this.isArmoryContext;
@@ -4185,16 +4194,34 @@
 
             // Also listen for clicks on tabs as a backup
             document.addEventListener('click', (e) => {
-                const target = e.target;
-                // Check if clicked element is or is within a tab
-                const tab = target.closest('.sn-chrome-one-tab') || target.closest('[role="tab"]');
+                let tab = null;
+
+                // Prefer composedPath to handle shadow DOM (sn-canvas-tabs)
+                if (typeof e.composedPath === 'function') {
+                    const path = e.composedPath();
+                    tab = path.find(el =>
+                        el &&
+                        el.classList &&
+                        el.classList.contains('sn-chrome-one-tab')
+                    ) || path.find(el =>
+                        el &&
+                        el.getAttribute &&
+                        el.getAttribute('role') === 'tab'
+                    );
+                }
+
+                // Fallback for non-shadow or older browsers
+                if (!tab && e.target) {
+                    tab = e.target.closest('.sn-chrome-one-tab') || e.target.closest('[role="tab"]');
+                }
+
                 if (tab) {
-                    console.log('[tabTitle] Tab click detected');
+                    console.log('[tabTitle] Tab click detected via composedPath or closest');
                     // Reset field monitoring
                     this._monitoredFields = {};
                     // Trigger page state's tab switch handler after a short delay
                     setTimeout(() => {
-                        if (AL.pageState && AL.pageState.onTabSwitch) {
+                        if (AL.pageState && typeof AL.pageState.onTabSwitch === 'function') {
                             AL.pageState.onTabSwitch();
                         }
                     }, 100);
@@ -4232,6 +4259,15 @@
          * Update ServiceNow workspace tab label
          */
         update() {
+            // NEW: refresh context from the live form before updating the tab label
+            if (AL.pageState && typeof AL.pageState.readFieldsAndUpdate === 'function') {
+                try {
+                    AL.pageState.readFieldsAndUpdate();
+                } catch (e) {
+                    console.error('[ArmoryLink] Error updating pageState before tab title refresh', e);
+                }
+            }
+
             const tabLabel = this.getTabLabelElement();
             if (!tabLabel) {
                 console.log('[tabTitle] Could not find ServiceNow tab label element');
