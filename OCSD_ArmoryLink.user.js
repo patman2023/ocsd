@@ -191,30 +191,61 @@
 
         /**
          * Check if an element is actually visible in the DOM
-         * Used to prefer active workspace tab fields over hidden duplicates
+         * Based on Tabbed Names pattern for reliable visibility detection
          */
         isElementVisible(el) {
             if (!el || !(el instanceof Element)) return false;
 
-            // Skip if hidden via attribute
+            // Check 1: hidden attribute
             if (el.hasAttribute('hidden')) return false;
 
-            // Skip if aria-hidden="true" on this or any ancestor/host
+            // Check 2: offsetParent === null is a reliable visibility check
+            // Elements with display:none or visibility:hidden have null offsetParent
+            // (except for body and position:fixed elements)
+            if (el.offsetParent === null && el.tagName !== 'BODY') {
+                // Double-check it's not position:fixed (which also has null offsetParent)
+                try {
+                    const style = window.getComputedStyle(el);
+                    if (style && style.position === 'fixed') {
+                        // It's fixed position, continue other checks
+                    } else {
+                        return false; // Hidden via display:none or visibility:hidden
+                    }
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            // Check 3: aria-hidden="true" on element or ancestors
             let node = el;
-            while (node) {
+            let depth = 0;
+            while (node && depth < 50) {
                 if (node.getAttribute && node.getAttribute('aria-hidden') === 'true') {
                     return false;
                 }
                 node = node.parentNode || (node.host || null);
+                depth++;
             }
 
-            // Use geometry + computed style as a final check
-            const rect = el.getBoundingClientRect();
-            if (rect.width === 0 || rect.height === 0) return false;
+            // Check 4: Zero dimensions (collapsed or empty)
+            try {
+                const rect = el.getBoundingClientRect();
+                if (rect.width === 0 && rect.height === 0) {
+                    return false;
+                }
+            } catch (e) {
+                // getBoundingClientRect failed, assume visible
+            }
 
-            const style = window.getComputedStyle(el);
-            if (!style || style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
-                return false;
+            // Check 5: Computed style checks
+            try {
+                const style = window.getComputedStyle(el);
+                if (!style) return false;
+                if (style.display === 'none') return false;
+                if (style.visibility === 'hidden') return false;
+                if (style.opacity === '0') return false;
+            } catch (e) {
+                // getComputedStyle failed, assume visible
             }
 
             return true;
@@ -237,66 +268,23 @@
             }
 
             try {
-                // If no path, use deep query to pierce shadow DOM,
-                // CRITICAL: Check both visibility AND tab ancestry to prevent cross-tab contamination
+                // Tabbed Names pattern: Get all matches, return first visible one
                 if (!selectorPath || selectorPath.length === 0) {
-                    // Get the active workspace root
-                    let searchRoot = document;
-                    let hasActiveRoot = false;
-
-                    if (AL.pageState && typeof AL.pageState.getActiveRoot === 'function') {
-                        try {
-                            const activeRoot = AL.pageState.getActiveRoot();
-                            if (activeRoot && activeRoot !== document) {
-                                searchRoot = activeRoot;
-                                hasActiveRoot = true;
-                            }
-                        } catch (e) {
-                            console.warn('[utils] Error getting active root:', e);
-                        }
-                    }
-
-                    // Search entire document (to handle various DOM structures)
+                    // Search entire document with deep query (pierce shadow DOM)
                     const allMatches = this.querySelectorAllDeep(selector, document);
 
-                    if (allMatches && allMatches.length > 0) {
-                        // Primary strategy: Find visible elements that are in active tab
-                        // This prevents cross-tab contamination while allowing fields to work
-                        const visibleInActiveTab = allMatches.filter(el => {
-                            const isVisible = this.isElementVisible(el);
-                            const isInActive = this.isInActiveTab(el);
-                            return isVisible && isInActive;
-                        });
-
-                        if (visibleInActiveTab.length > 0) {
-                            return visibleInActiveTab[0];
-                        }
-
-                        // Fallback: Just use visibility check (allows fields to work even if ancestry check fails)
-                        const visibleMatches = allMatches.filter(el => this.isElementVisible(el));
-                        if (visibleMatches.length > 0) {
-                            return visibleMatches[0];
-                        }
-
-                        // If we have an active root, try searching directly in it
-                        if (hasActiveRoot) {
-                            const localMatches = this.querySelectorAllDeep(selector, searchRoot);
-                            if (localMatches && localMatches.length > 0) {
-                                // Prefer visible match in active root
-                                const visibleInRoot = localMatches.find(el => this.isElementVisible(el));
-                                if (visibleInRoot) {
-                                    return visibleInRoot;
-                                }
-                                // Return first match in active root even if not visible
-                                return localMatches[0];
-                            }
-                        }
-
-                        // Last resort: return first match found anywhere
-                        return allMatches[0];
+                    if (!allMatches || allMatches.length === 0) {
+                        return null;
                     }
 
-                    return null;
+                    // Find first visible element (this is how Tabbed Names works)
+                    const visibleMatch = allMatches.find(el => this.isElementVisible(el));
+                    if (visibleMatch) {
+                        return visibleMatch;
+                    }
+
+                    // Fallback: if none are visible, return first match
+                    return allMatches[0];
                 }
 
                 // Walk through path (iframes, shadow roots)
