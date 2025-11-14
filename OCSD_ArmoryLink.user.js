@@ -3823,6 +3823,147 @@
     };
 
     // ========================================
+    // MODULE: TABS (Tab Tracking)
+    // ========================================
+    // Based on the pattern from Tabbed Names userscript
+    // Tracks tabs by their DOM ID (from <a role="tab"> inside <li>)
+    AL.tabs = (() => {
+        const store = new Map(); // tabId -> { pageId?, label?, lastSeen?, etc. }
+
+        /**
+         * Get all tab container <li> elements
+         * Uses AL.utils.querySelectorAllDeep to pierce shadow DOM
+         */
+        const tabLis = () => {
+            return AL.utils.querySelectorAllDeep('li.sn-chrome-one-tab-container') || [];
+        };
+
+        /**
+         * Get the <a role="tab"> element inside a tab container <li>
+         */
+        const tabA = (li) => {
+            return li && li.querySelector ? li.querySelector('a[role="tab"]') : null;
+        };
+
+        /**
+         * Extract the tab ID from a tab container <li>
+         * The ID is on the <a role="tab"> element inside
+         */
+        const tabId = (li) => {
+            const a = tabA(li);
+            return a && a.id ? a.id : null;
+        };
+
+        /**
+         * Check if a tab container <li> is currently active/selected
+         */
+        const isActive = (li) => {
+            if (!li) return false;
+            const a = tabA(li);
+            return !!(
+                (li.classList && li.classList.contains('is-selected')) ||
+                (a && a.getAttribute && a.getAttribute('aria-selected') === 'true')
+            );
+        };
+
+        /**
+         * Get the currently active tab container <li>
+         */
+        const getActiveTabLi = () => {
+            const lis = tabLis();
+            return lis.find(isActive) || null;
+        };
+
+        /**
+         * Get the ID of the currently active tab
+         */
+        const getActiveTabId = () => {
+            const li = getActiveTabLi();
+            return li ? tabId(li) : null;
+        };
+
+        /**
+         * Ensure a tab ID has an entry in the store
+         * Returns the entry for chaining
+         */
+        const touchTab = (id) => {
+            if (!id) return null;
+            if (!store.has(id)) {
+                store.set(id, {
+                    created: Date.now(),
+                    lastSeen: Date.now()
+                });
+            }
+            return store.get(id);
+        };
+
+        /**
+         * Remove store entries for tabs that no longer exist in the DOM
+         */
+        const cleanup = () => {
+            const existing = new Set(tabLis().map(tabId).filter(Boolean));
+            let cleaned = 0;
+            for (const key of Array.from(store.keys())) {
+                if (!existing.has(key)) {
+                    store.delete(key);
+                    cleaned++;
+                }
+            }
+            if (cleaned > 0) {
+                console.log('[tabs] Cleaned up', cleaned, 'deleted tabs from store');
+            }
+        };
+
+        /**
+         * Update the store entry for the currently active tab
+         * Returns the updated entry or null if no active tab
+         */
+        const updateFromActive = () => {
+            const id = getActiveTabId();
+            if (!id) return null;
+
+            const entry = touchTab(id);
+            entry.lastSeen = Date.now();
+
+            // Could store additional info here if needed
+            // e.g., entry.label = getTabLabel(id);
+
+            return entry;
+        };
+
+        /**
+         * Get the store entry for a specific tab ID
+         */
+        const getTabEntry = (id) => {
+            return id ? store.get(id) : null;
+        };
+
+        /**
+         * Initialize the tabs module
+         */
+        const init = () => {
+            console.log('[tabs] Initialized - tracking tabs by DOM ID');
+            // Do initial scan
+            cleanup();
+            updateFromActive();
+        };
+
+        return {
+            tabLis,
+            tabId,
+            isActive,
+            getActiveTabLi,
+            getActiveTabId,
+            touchTab,
+            cleanup,
+            updateFromActive,
+            getTabEntry,
+            init,
+            store
+        };
+    })();
+
+    // ========================================
     // MODULE: PAGE_STATE (PageContextStore)
     // ========================================
     AL.pageState = {
@@ -3831,7 +3972,11 @@
         activePageId: null,  // Currently active page ID
 
         init() {
-            console.log('[pageState] Initialized - using content-based tracking');
+            console.log('[pageState] Initialized - using tab ID-based tracking');
+            // Initialize tab tracking
+            if (AL.tabs && typeof AL.tabs.init === 'function') {
+                AL.tabs.init();
+            }
         },
 
         /**
@@ -3854,36 +3999,22 @@
         },
 
         /**
-         * Compute pageId - ALWAYS look at active content, don't cache
+         * Compute pageId based on active tab ID (Tabbed Names pattern)
+         * The tab DOM ID is stable and persists even when tabs are reordered
          */
         computePageId() {
-            const url = new URL(window.location.href);
-            const path = url.pathname || '';
+            // Primary: Use active tab ID if available
+            const activeTabId = AL.tabs && AL.tabs.getActiveTabId ? AL.tabs.getActiveTabId() : null;
+            if (activeTabId) {
+                return `tab:${activeTabId}`;
+            }
 
-            // 1. Check URL params (classic UI)
+            // Fallback: Check URL params for classic UI or non-workspace pages
+            const url = new URL(window.location.href);
             const urlSysId = url.searchParams.get('sysparm_sys_id') || url.searchParams.get('sys_id');
+            const path = url.pathname || '';
             if (urlSysId) {
                 return `${path}::${urlSysId}`;
-            }
-
-            // 2. Check ACTIVE content panel for record ID
-            const panel = this.getActiveContentPanel();
-            if (panel) {
-                // Look for sys_id input
-                const sysIdInput = panel.querySelector('input[name="sys_id"]') ||
-                                 AL.utils.querySelectorDeep('input[name="sys_id"]', panel);
-
-                if (sysIdInput && sysIdInput.value && sysIdInput.value !== '-1') {
-                    return `${path}::${sysIdInput.value}`;
-                }
-            }
-
-            // 3. Use selected tab's ID as fallback
-            const selectedTab = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected');
-            if (selectedTab) {
-                const tabId = selectedTab.id || '';
-                const tabText = (selectedTab.textContent || '').trim().substring(0, 30);
-                return `${path}::tab_${tabId}_${tabText}`.replace(/[^a-z0-9_:]/gi, '_');
             }
 
             return 'default';
@@ -4163,9 +4294,24 @@
 
         /**
          * Handle tab switch event (called by tab title monitor)
+         * Uses AL.tabs to update active tab tracking and clean up deleted tabs
          */
         onTabSwitch() {
             console.log('[pageState] Tab switch detected, refreshing...');
+
+            // Update AL.tabs tracking
+            try {
+                if (AL.tabs && typeof AL.tabs.updateFromActive === 'function') {
+                    AL.tabs.updateFromActive();
+                }
+                if (AL.tabs && typeof AL.tabs.cleanup === 'function') {
+                    AL.tabs.cleanup();
+                }
+            } catch (e) {
+                console.error('[pageState] Error updating AL.tabs on tab switch:', e);
+            }
+
+            // Refresh page state for new active tab
             this.refreshActivePage(true);
         }
     };
