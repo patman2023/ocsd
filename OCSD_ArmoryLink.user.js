@@ -3757,6 +3757,9 @@
                 }
             }, 2000);
 
+            // Monitor for tab switches in ServiceNow workspace
+            this.monitorTabSwitches();
+
             // Also set up a periodic update every 2 seconds as a backup
             setInterval(() => {
                 this.update();
@@ -3766,6 +3769,90 @@
             }, 2000);
 
             console.log('[tabTitle] Field monitoring started');
+        },
+
+        /**
+         * Monitor ServiceNow workspace tab switches
+         */
+        monitorTabSwitches() {
+            // Find the tab container
+            const findTabContainer = () => {
+                return AL.utils.querySelectorDeep('.sn-chrome-tabs-group') ||
+                       AL.utils.querySelectorDeep('[role="tablist"]') ||
+                       document.querySelector('.sn-chrome-tabs-group') ||
+                       document.querySelector('[role="tablist"]');
+            };
+
+            const setupTabObserver = () => {
+                const tabContainer = findTabContainer();
+                if (!tabContainer) {
+                    console.log('[tabTitle] Tab container not found, will retry...');
+                    return false;
+                }
+
+                console.log('[tabTitle] Found tab container, setting up observer');
+
+                // Watch for attribute changes on tab elements (class changes for is-selected)
+                const tabObserver = new MutationObserver((mutations) => {
+                    for (const mutation of mutations) {
+                        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                            const target = mutation.target;
+                            // Check if this tab just became selected
+                            if (target.classList && target.classList.contains('is-selected')) {
+                                console.log('[tabTitle] Tab switched detected, updating...');
+                                // Reset field monitoring for new page
+                                this._monitoredFields = {};
+                                // Update immediately
+                                setTimeout(() => {
+                                    this.update();
+                                    if (AL.ui && AL.ui.updateTicker) {
+                                        AL.ui.updateTicker();
+                                    }
+                                }, 500); // Small delay to let page load
+                            }
+                        }
+                    }
+                });
+
+                // Observe all tabs in the container
+                tabObserver.observe(tabContainer, {
+                    attributes: true,
+                    attributeFilter: ['class', 'aria-selected'],
+                    subtree: true
+                });
+
+                console.log('[tabTitle] Tab switch monitoring active');
+                return true;
+            };
+
+            // Try to setup immediately
+            if (!setupTabObserver()) {
+                // Retry every 2 seconds if not found
+                const retryInterval = setInterval(() => {
+                    if (setupTabObserver()) {
+                        clearInterval(retryInterval);
+                    }
+                }, 2000);
+            }
+
+            // Also listen for clicks on tabs as a backup
+            document.addEventListener('click', (e) => {
+                const target = e.target;
+                // Check if clicked element is or is within a tab
+                const tab = target.closest('.sn-chrome-one-tab') || target.closest('[role="tab"]');
+                if (tab) {
+                    console.log('[tabTitle] Tab click detected, updating...');
+                    // Reset field monitoring
+                    this._monitoredFields = {};
+                    // Update after a short delay
+                    setTimeout(() => {
+                        this.update();
+                        if (AL.ui && AL.ui.updateTicker) {
+                            AL.ui.updateTicker();
+                        }
+                    }, 500);
+                }
+            }, true);
         },
 
         /**
