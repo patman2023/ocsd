@@ -4305,25 +4305,18 @@
                 if (!typeField || !userField) {
                     if (retryCount < maxRetries) {
                         retryCount++;
-                        if (this.debugMode) console.log(`[tabTitle] Fields not ready, retry ${retryCount}/${maxRetries}`);
+                        if (this.debugMode) console.log(`[tabTitle] Field configs not ready, retry ${retryCount}/${maxRetries}`);
                         return false;
                     }
-                    console.warn('[tabTitle] Fields not found after max retries');
+                    console.warn('[tabTitle] Field configs not found after max retries');
                     return false;
                 }
 
-                const typeElement = AL.utils.findElement(typeField.selector, typeField.selectorPath);
-                const userElement = AL.utils.findElement(userField.selector, userField.selectorPath);
+                // Search entire document (not scoped to active page) since we're monitoring globally
+                const typeElement = AL.utils.findElement(typeField.selector, typeField.selectorPath, document);
+                const userElement = AL.utils.findElement(userField.selector, userField.selectorPath, document);
 
-                if (!typeElement && !userElement) {
-                    if (retryCount < maxRetries) {
-                        retryCount++;
-                        if (this.debugMode) console.log(`[tabTitle] Field elements not found, retry ${retryCount}/${maxRetries}`);
-                        return false;
-                    }
-                    console.warn('[tabTitle] Field elements not found after max retries');
-                    return false;
-                }
+                let foundAny = false;
 
                 // Monitor Type field (combobox in shadow DOM)
                 if (typeElement && typeElement.getAttribute('role') === 'combobox') {
@@ -4333,19 +4326,38 @@
                         subtree: true,
                         characterData: true
                     });
-                    if (this.debugMode) console.log('[tabTitle] Type field monitoring active');
+                    foundAny = true;
+                    console.log('[tabTitle] Type field monitoring active');
+                } else if (retryCount === 0) {
+                    if (this.debugMode) console.log('[tabTitle] Type field element not found');
                 }
 
                 // Monitor User field
                 if (userElement) {
                     userElement.addEventListener('change', debouncedRefresh);
                     userElement.addEventListener('input', debouncedRefresh);
-                    if (this.debugMode) console.log('[tabTitle] User field monitoring active');
+                    foundAny = true;
+                    console.log('[tabTitle] User field monitoring active');
+                } else if (retryCount === 0) {
+                    if (this.debugMode) console.log('[tabTitle] User field element not found');
                 }
 
-                this.fieldMonitoringSetup = true;
-                console.log('[tabTitle] Field monitoring started');
-                return true;
+                // If we found at least one field, consider it a success
+                if (foundAny) {
+                    this.fieldMonitoringSetup = true;
+                    console.log('[tabTitle] Field monitoring started');
+                    return true;
+                }
+
+                // If we found neither, retry
+                if (retryCount < maxRetries) {
+                    retryCount++;
+                    if (this.debugMode) console.log(`[tabTitle] No field elements found, retry ${retryCount}/${maxRetries}`);
+                    return false;
+                }
+
+                console.warn('[tabTitle] Field elements not found after max retries');
+                return false;
             };
 
             // Try immediately
