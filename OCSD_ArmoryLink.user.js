@@ -1647,28 +1647,24 @@
 
             this.updateTicker();
 
-            // Start auto-update interval (every 2 seconds)
-            if (!this._tickerInterval) {
-                this._tickerInterval = setInterval(() => {
-                    this.updateTicker();
-                }, 2000);
-            }
+            // Removed constant polling - ticker now updates only on events:
+            // - Tab switches (via AL.pageState.onTabSwitch)
+            // - Field changes (via field watchers)
+            // - Scanner input (via AL.worker.processScan)
         },
 
         /**
-         * Update ticker
+         * Update ticker (uses cached context, no field reads)
          */
         updateTicker() {
             if (!this.ticker) return;
 
-            // NEW: ensure the pageState cache is fresh for the active page
-            if (AL.pageState && typeof AL.pageState.readFieldsAndUpdate === 'function') {
-                try {
-                    AL.pageState.readFieldsAndUpdate();
-                } catch (e) {
-                    console.error('[ArmoryLink] Error updating pageState before ticker refresh', e);
-                }
-            }
+            // NOTE: We don't call readFieldsAndUpdate() here anymore
+            // Fields are read only when:
+            // - Tab switches (via onTabSwitch)
+            // - Field changes (via field watchers)
+            // - Scanner input (via processScan)
+            // Ticker just displays the already-cached context
 
             try {
                 // Get mode and determine dot class
@@ -4582,13 +4578,10 @@
             // Monitor for tab switches in ServiceNow workspace
             this.monitorTabSwitches();
 
-            // Also set up a periodic update every 2 seconds as a backup
-            setInterval(() => {
-                this.update();
-                if (AL.ui && AL.ui.updateTicker) {
-                    AL.ui.updateTicker();
-                }
-            }, 2000);
+            // Removed constant polling - updates now happen only on events:
+            // - Tab switches (via MutationObserver and click handlers)
+            // - Field changes (via field change listeners)
+            // Updates are event-driven, not polling-based
 
             console.log('[tabTitle] Field monitoring started');
         },
@@ -4615,6 +4608,8 @@
                 console.log('[tabTitle] Found tab container, setting up observer');
 
                 // Watch for attribute changes on tab elements (class changes for is-selected)
+                // Debounced to prevent rapid-fire updates
+                let tabSwitchTimeout = null;
                 const tabObserver = new MutationObserver((mutations) => {
                     for (const mutation of mutations) {
                         if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
@@ -4622,12 +4617,18 @@
                             // Check if this tab just became selected
                             if (target.classList && target.classList.contains('is-selected')) {
                                 console.log('[tabTitle] Tab switched detected via MutationObserver');
-                                // Reset field monitoring for new page
-                                this._monitoredFields = {};
-                                // Trigger page state's tab switch handler
-                                if (AL.pageState && AL.pageState.onTabSwitch) {
-                                    AL.pageState.onTabSwitch();
-                                }
+
+                                // Debounce: only process after 150ms of no more changes
+                                clearTimeout(tabSwitchTimeout);
+                                tabSwitchTimeout = setTimeout(() => {
+                                    // Reset field monitoring for new page
+                                    this._monitoredFields = {};
+                                    // Trigger page state's tab switch handler
+                                    if (AL.pageState && AL.pageState.onTabSwitch) {
+                                        AL.pageState.onTabSwitch();
+                                    }
+                                }, 150);
+                                break; // Only need to detect one switch
                             }
                         }
                     }
