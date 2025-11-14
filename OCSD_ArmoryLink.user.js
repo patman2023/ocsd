@@ -3982,10 +3982,21 @@
             const entry = touchTab(id);
             entry.lastSeen = Date.now();
 
-            // Could store additional info here if needed
-            // e.g., entry.label = getTabLabel(id);
-
             return entry;
+        };
+
+        /**
+         * Ensure all current tabs have entries in the store
+         * This prevents labels from being lost when tabs are reordered
+         */
+        const ensureAllTabs = () => {
+            const lis = tabLis();
+            lis.forEach(li => {
+                const id = tabId(li);
+                if (id) {
+                    touchTab(id); // Create entry if doesn't exist
+                }
+            });
         };
 
         /**
@@ -4014,6 +4025,7 @@
             touchTab,
             cleanup,
             updateFromActive,
+            ensureAllTabs,
             getTabEntry,
             init,
             store
@@ -4706,39 +4718,71 @@
         },
 
         /**
-         * Update ServiceNow workspace tab label
+         * Update ServiceNow workspace tab labels
+         * Based on Tabbed Names pattern: update ALL tabs from their stored contexts
          */
         update() {
-            // NEW: refresh context from the live form before updating the tab label
+            // Step 1: Update the active tab's data from the form
             if (AL.pageState && typeof AL.pageState.readFieldsAndUpdate === 'function') {
                 try {
                     AL.pageState.readFieldsAndUpdate();
                 } catch (e) {
-                    console.error('[ArmoryLink] Error updating pageState before tab title refresh', e);
+                    console.error('[tabTitle] Error updating pageState before tab title refresh', e);
                 }
             }
 
-            const tabLabel = this.getTabLabelElement();
-            if (!tabLabel) {
-                console.log('[tabTitle] Could not find ServiceNow tab label element');
-                return;
+            // Step 2: Get the active page context and store it in AL.tabs
+            const activePageId = AL.pageState.activePageId;
+            const activeCtx = AL.pageState.getActivePageContext();
+            const activeTabId = AL.tabs && AL.tabs.getActiveTabId ? AL.tabs.getActiveTabId() : null;
+
+            if (activeTabId && activeCtx) {
+                // Store the label data in AL.tabs for this tab
+                const tabEntry = AL.tabs.touchTab(activeTabId);
+                if (tabEntry) {
+                    tabEntry.label = `${activeCtx.typeIcon || '⚫'} | ${activeCtx.userLast || 'Unknown'}`;
+                    tabEntry.pageId = activePageId;
+                }
             }
 
-            // Get active page context
-            const ctx = AL.pageState.getActivePageContext();
+            // Step 3: Ensure all tabs have store entries (prevents lost labels)
+            if (AL.tabs && AL.tabs.ensureAllTabs) {
+                AL.tabs.ensureAllTabs();
+            }
 
-            // Format title using context: ICON | LASTNAME
-            const icon = ctx.typeIcon || '⚫';
-            const lastName = ctx.userLast || 'Unknown';
-            const newTitle = `${icon} | ${lastName}`;
+            // Step 4: Update ALL visible tabs from their stored data (Tabbed Names pattern)
+            try {
+                const allTabLis = AL.tabs && AL.tabs.tabLis ? AL.tabs.tabLis() : [];
 
-            // Update the tab label text
-            tabLabel.textContent = newTitle;
+                allTabLis.forEach(li => {
+                    const tabId = AL.tabs.tabId(li);
+                    if (!tabId) return;
 
-            // Update the tooltip as well
-            tabLabel.setAttribute('data-tooltip', newTitle);
+                    // Get the label element for this tab
+                    const labelElement = li.querySelector('.sn-chrome-one-tab-label');
+                    if (!labelElement) return;
 
-            console.log('[tabTitle] Updated tab label to:', newTitle);
+                    // Get stored data for this tab
+                    const tabEntry = AL.tabs.getTabEntry(tabId);
+                    if (tabEntry && tabEntry.label) {
+                        // Apply the stored label
+                        labelElement.textContent = tabEntry.label;
+                        labelElement.setAttribute('data-tooltip', tabEntry.label);
+                    }
+                });
+
+                console.log('[tabTitle] Updated all tab labels from stored contexts');
+            } catch (e) {
+                console.error('[tabTitle] Error updating all tab labels:', e);
+
+                // Fallback: just update the active tab
+                const tabLabel = this.getTabLabelElement();
+                if (tabLabel && activeCtx) {
+                    const newTitle = `${activeCtx.typeIcon || '⚫'} | ${activeCtx.userLast || 'Unknown'}`;
+                    tabLabel.textContent = newTitle;
+                    tabLabel.setAttribute('data-tooltip', newTitle);
+                }
+            }
         },
 
         /**
