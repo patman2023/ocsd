@@ -78,10 +78,15 @@
                     }
 
                     // Search same-origin iframes
-                    if (el.tagName === 'IFRAME' && el.contentDocument) {
+                    if (el.tagName === 'IFRAME') {
                         try {
-                            element = this.querySelectorDeep(selector, el.contentDocument);
-                            if (element) return element;
+                            if (el.contentDocument) {
+                                element = this.querySelectorDeep(selector, el.contentDocument);
+                                if (element) {
+                                    console.log(`[utils] querySelectorDeep: Found "${selector}" inside iframe`);
+                                    return element;
+                                }
+                            }
                         } catch (e) {
                             // Ignore cross-origin iframes
                         }
@@ -3451,33 +3456,45 @@
          */
         getFieldValue(key) {
             const field = this.getField(key);
-            if (!field) return null;
+            if (!field) {
+                console.log(`[fields] getFieldValue('${key}'): field config not found`);
+                return null;
+            }
 
             const element = AL.utils.findElement(field.selector, field.selectorPath);
-            if (!element) return null;
+            if (!element) {
+                console.log(`[fields] getFieldValue('${key}'): element not found for selector: ${field.selector}`);
+                return null;
+            }
+            console.log(`[fields] getFieldValue('${key}'): element found, extracting value...`);
 
             try {
+                let value = null;
+
                 // Special handling for Type field (combobox in shadow DOM)
                 if (key === 'type' && element.getAttribute('role') === 'combobox') {
                     // Get the displayed text from the trigger button
                     const labelElement = element.querySelector('.now-select-trigger-label');
                     if (labelElement) {
-                        return labelElement.textContent?.trim() || null;
+                        value = labelElement.textContent?.trim() || null;
+                    } else {
+                        // Fallback to aria-label or button text
+                        value = element.textContent?.trim() || element.getAttribute('aria-label') || null;
                     }
-                    // Fallback to aria-label or button text
-                    return element.textContent?.trim() || element.getAttribute('aria-label') || null;
+                }
+                // Standard handling for other fields
+                else if (element.tagName === 'SELECT') {
+                    value = element.options[element.selectedIndex]?.text || element.value;
+                } else if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+                    value = element.value;
+                } else if (element.tagName === 'BUTTON') {
+                    value = element.textContent?.trim() || null;
+                } else {
+                    value = element.textContent;
                 }
 
-                // Standard handling for other fields
-                if (element.tagName === 'SELECT') {
-                    return element.options[element.selectedIndex]?.text || element.value;
-                } else if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
-                    return element.value;
-                } else if (element.tagName === 'BUTTON') {
-                    return element.textContent?.trim() || null;
-                } else {
-                    return element.textContent;
-                }
+                console.log(`[fields] getFieldValue('${key}'): extracted value = "${value}"`);
+                return value;
             } catch (error) {
                 console.log('[fields] Error getting field:', key, error);
                 return null;
@@ -3860,6 +3877,15 @@
                 const controlOneRadioValue = AL.fields.getFieldValue('controlOneRadio');
                 const updatedOnValue = AL.fields.getFieldValue('updated_on');
 
+                // Log field values for debugging
+                console.log('[pageState] Field values read:', {
+                    type: typeValue,
+                    user: userValue,
+                    vehicle: vehicleValue,
+                    weapon: weaponValue,
+                    updatedOn: updatedOnValue
+                });
+
                 // Update context
                 ctx.type = typeValue;
                 ctx.userFull = userValue;
@@ -3883,6 +3909,14 @@
                 } else {
                     ctx.typeIcon = '⚫';
                 }
+
+                console.log('[pageState] Context updated:', {
+                    pageId: pageId,
+                    typeIcon: ctx.typeIcon,
+                    userLast: ctx.userLast,
+                    type: ctx.type,
+                    updatedOn: ctx.updatedOn
+                });
 
                 this.setActivePageId(pageId);
                 return ctx;
@@ -4240,6 +4274,12 @@
 
             // Get active page context
             const ctx = AL.pageState.getActivePageContext();
+            console.log('[tabTitle] Active page context:', {
+                typeIcon: ctx.typeIcon,
+                userLast: ctx.userLast,
+                type: ctx.type,
+                userFull: ctx.userFull
+            });
 
             // Format title using context: ICON | LASTNAME
             const icon = ctx.typeIcon || '⚫';
