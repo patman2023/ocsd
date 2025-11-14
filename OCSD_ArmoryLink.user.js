@@ -2186,19 +2186,50 @@
 
                 <!-- Action Buttons -->
                 <div style="margin-top: 20px;">
-                    <button class="al-btn" id="al-save-settings-btn">Save Settings</button>
                     <button class="al-btn al-btn-secondary" id="al-reset-settings-btn">Reset to Defaults</button>
+                    <span style="color: #999; font-size: 12px; margin-left: 15px;">Settings auto-save on change</span>
                 </div>
             `;
 
-            // Update speech rate/pitch value displays
+            // Auto-save helper function
+            const autoSave = () => {
+                this.saveSettingsFromForm(true); // Pass true to indicate auto-save (silent mode)
+            };
+
+            // Layout settings - auto-save on change
+            document.getElementById('al-setting-dock-mode').onchange = autoSave;
+            document.getElementById('al-setting-panel-width').onchange = autoSave;
+            document.getElementById('al-setting-panel-height').onchange = autoSave;
+
+            // Capture settings - auto-save on change
+            document.getElementById('al-setting-scan-throttle').onchange = autoSave;
+            document.getElementById('al-setting-duplicate-window').onchange = autoSave;
+            document.getElementById('al-setting-scan-timeout').onchange = autoSave;
+
+            // Toast settings - auto-save on change
+            document.getElementById('al-setting-toast-position').onchange = autoSave;
+            document.getElementById('al-setting-toast-duration').onchange = autoSave;
+            document.getElementById('al-setting-toast-sticky').onchange = autoSave;
+
+            // Speech settings - auto-save on change
+            document.getElementById('al-setting-speech-enabled').onchange = autoSave;
+
+            // Update speech rate/pitch value displays and auto-save
             document.getElementById('al-setting-speech-rate').oninput = (e) => {
                 document.getElementById('al-speech-rate-value').textContent = e.target.value;
+                autoSave();
             };
 
             document.getElementById('al-setting-speech-pitch').oninput = (e) => {
                 document.getElementById('al-speech-pitch-value').textContent = e.target.value;
+                autoSave();
             };
+
+            // Ticker settings - auto-save on change
+            document.getElementById('al-setting-ticker-enabled').onchange = autoSave;
+
+            // Debug settings - auto-save on change
+            document.getElementById('al-setting-debug-enabled').onchange = autoSave;
 
             // Test speech button
             document.getElementById('al-test-speech-btn').onclick = () => {
@@ -2218,11 +2249,6 @@
                 window.speechSynthesis.speak(utterance);
             };
 
-            // Save button
-            document.getElementById('al-save-settings-btn').onclick = () => {
-                this.saveSettingsFromForm();
-            };
-
             // Reset button
             document.getElementById('al-reset-settings-btn').onclick = () => {
                 if (confirm('Reset all settings to defaults?')) {
@@ -2236,7 +2262,7 @@
         /**
          * Save settings from form
          */
-        saveSettingsFromForm() {
+        saveSettingsFromForm(silent = false) {
             const settings = {
                 // Layout
                 dockMode: document.getElementById('al-setting-dock-mode').value,
@@ -2277,7 +2303,11 @@
             };
 
             AL.persistence.set('settings', settings);
-            this.showToast('Settings Saved', 'Settings updated successfully', 'success');
+
+            // Only show toast if not silent (manual save, not auto-save)
+            if (!silent) {
+                this.showToast('Settings Saved', 'Settings updated successfully', 'success');
+            }
 
             // Apply dock mode change
             if (this.panel) {
