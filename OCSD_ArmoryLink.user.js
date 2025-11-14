@@ -1632,7 +1632,7 @@
 
                 this.ticker.innerHTML = `
                     <span style="display: flex; align-items: center;"><span class="al-ticker-status-dot ${modeDotClass}"></span></span>
-                    <span>${typeIcon}  ${userValue}</span>
+                    <span>${userValue}</span>
                     ${vehicleValue ? `<span>${vehicleValue}</span>` : ''}
                     ${weaponValue ? `<span>${weaponValue}</span>` : ''}
                     ${prefixText ? `<span style="color: ${prefixColor};">${prefixText}</span>` : ''}
