@@ -173,7 +173,7 @@
          * Handles "Last, First" and "First Last" formats
          */
         parseName(fullName) {
-            if (!fullName) return { first: '', last: '', lastUpper: 'NO USER' };
+            if (!fullName) return { first: '', last: '', lastUpper: 'UNKNOWN' };
 
             const trimmed = fullName.trim();
 
@@ -183,7 +183,7 @@
                 return {
                     first: parts[1] || '',
                     last: parts[0] || '',
-                    lastUpper: (parts[0] || 'NO USER').toUpperCase()
+                    lastUpper: (parts[0] || 'UNKNOWN').toUpperCase()
                 };
             }
 
@@ -244,6 +244,16 @@
             } catch {
                 return fallback;
             }
+        },
+
+        /**
+         * Escape HTML special characters
+         */
+        escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
         },
 
         init() {
@@ -1500,9 +1510,12 @@
             const mode = AL.capture.mode;
             const modeDotClass = `mode-${mode}`;
 
-            const typeValue = AL.fields.getFieldValue('type') || 'N/A';
-            const userValue = AL.fields.getFieldValue('user') || 'N/A';
-            const updatedOnValue = AL.fields.getFieldValue('updated_on') || '';
+            // Get active page state (this ensures ticker shows only the active tab's data)
+            const state = AL.pageState.updateActiveState();
+
+            const typeValue = state.type || 'N/A';
+            const userValue = state.userFull || 'N/A';
+            const updatedOnValue = state.updatedOn || '';
             const prefixText = AL.prefixes.activePrefix ? `Prefix: ${AL.prefixes.activePrefix.label} (${AL.prefixes.activeStickyCount})` : '';
 
             // Determine ticker styling based on priority rules
@@ -3687,6 +3700,130 @@
     };
 
     // ========================================
+    // MODULE: PAGE_STATE
+    // ========================================
+    AL.pageState = {
+        // Per-tab state tracking for multi-page support
+        pageStates: {},        // Map of pageId -> state object
+        activePageId: null,    // Currently active page ID
+
+        init() {
+            console.log('[pageState] Initialized');
+        },
+
+        /**
+         * Get current active page ID (using tab element as identifier)
+         */
+        getActivePageId() {
+            // Use the active tab element as a unique identifier
+            const tabElement = AL.utils.querySelectorDeep('.sn-chrome-one-tab.is-selected');
+            if (tabElement) {
+                // Generate or retrieve a unique ID for this tab
+                if (!tabElement.dataset.alPageId) {
+                    tabElement.dataset.alPageId = AL.utils.generateId();
+                }
+                return tabElement.dataset.alPageId;
+            }
+            return 'default';
+        },
+
+        /**
+         * Get state for a specific page (or create if doesn't exist)
+         */
+        getPageState(pageId) {
+            if (!this.pageStates[pageId]) {
+                this.pageStates[pageId] = {
+                    type: null,
+                    typeIcon: '⚫',
+                    userFull: null,
+                    userLast: 'UNKNOWN',
+                    vehicle: null,
+                    weapon: null,
+                    taser: null,
+                    patrol: null,
+                    controlOneRadio: null,
+                    updatedOn: null,
+                    lastUpdate: Date.now()
+                };
+            }
+            return this.pageStates[pageId];
+        },
+
+        /**
+         * Get active page state
+         */
+        getActiveState() {
+            this.activePageId = this.getActivePageId();
+            return this.getPageState(this.activePageId);
+        },
+
+        /**
+         * Update active page state with current field values
+         */
+        updateActiveState() {
+            const pageId = this.getActivePageId();
+            const state = this.getPageState(pageId);
+
+            // Read field values
+            const typeValue = AL.fields.getFieldValue('type');
+            const userValue = AL.fields.getFieldValue('user');
+            const vehicleValue = AL.fields.getFieldValue('vehicle');
+            const weaponValue = AL.fields.getFieldValue('weapon');
+            const taserValue = AL.fields.getFieldValue('taser');
+            const patrolValue = AL.fields.getFieldValue('patrol');
+            const controlOneRadioValue = AL.fields.getFieldValue('controlOneRadio');
+            const updatedOnValue = AL.fields.getFieldValue('updated_on');
+
+            // Update state
+            state.type = typeValue;
+            state.userFull = userValue;
+            state.vehicle = vehicleValue;
+            state.weapon = weaponValue;
+            state.taser = taserValue;
+            state.patrol = patrolValue;
+            state.controlOneRadio = controlOneRadioValue;
+            state.updatedOn = updatedOnValue;
+            state.lastUpdate = Date.now();
+
+            // Determine type icon
+            const typeIcons = {
+                'Deployment': '🟡',
+                'Return': '🟢',
+                'default': '⚫'
+            };
+            state.typeIcon = typeIcons[typeValue] || typeIcons['default'];
+
+            // Parse user last name
+            if (userValue) {
+                const parsed = AL.utils.parseName(userValue);
+                state.userLast = parsed.lastUpper;
+            } else {
+                state.userLast = 'UNKNOWN';
+            }
+
+            this.activePageId = pageId;
+
+            console.log('[pageState] Updated state for page', pageId, state);
+            return state;
+        },
+
+        /**
+         * Clear state for a specific page
+         */
+        clearPageState(pageId) {
+            delete this.pageStates[pageId];
+        },
+
+        /**
+         * Clear all page states
+         */
+        clearAllStates() {
+            this.pageStates = {};
+            this.activePageId = null;
+        }
+    };
+
+    // ========================================
     // MODULE: TAB_TITLE
     // ========================================
     AL.tabTitle = {
@@ -3694,9 +3831,9 @@
         originalTitle: null,
         originalTooltip: null,
         typeIcons: {
-            'Deployment': '🟢',
-            'Return': '🟡',
-            'default': '⚙️'
+            'Deployment': '🟡',  // Yellow dot for Deployment
+            'Return': '🟢',      // Green dot for Return
+            'default': '⚫'      // Black dot for unknown
         },
 
         init() {
@@ -3930,21 +4067,11 @@
                 return;
             }
 
-            const typeValue = AL.fields.getFieldValue('type');
-            const userValue = AL.fields.getFieldValue('user');
+            // Update active page state with current field values
+            const state = AL.pageState.updateActiveState();
 
-            // Get icon
-            const icon = this.typeIcons[typeValue] || this.typeIcons['default'];
-
-            // Get last name
-            let lastName = 'NO USER';
-            if (userValue) {
-                const parsed = AL.utils.parseName(userValue);
-                lastName = parsed.lastUpper;
-            }
-
-            // Format title
-            const newTitle = `${icon} | ${lastName}`;
+            // Format title using state
+            const newTitle = `${state.typeIcon} | ${state.userLast}`;
 
             // Update the tab label text
             tabLabel.textContent = newTitle;
@@ -4351,6 +4478,7 @@
             AL.fields.init();
             AL.broadcast.init();
             AL.activeContext.init();
+            AL.pageState.init();
             AL.capture.init();
             AL.worker.init();
             AL.rules.init();
