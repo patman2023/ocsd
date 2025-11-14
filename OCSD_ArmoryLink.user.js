@@ -364,6 +364,16 @@
                     roles: ['read', 'write'],
                     commitEvent: 'blur',
                     enabled: true
+                },
+                {
+                    key: 'updated_on',
+                    label: 'Updated On',
+                    selector: "input[name='sys_updated_on-date']",
+                    selectorPath: [],
+                    kind: 'field',
+                    roles: ['read'],
+                    commitEvent: 'change',
+                    enabled: true
                 }
             ];
         },
@@ -1492,13 +1502,42 @@
 
             const typeValue = AL.fields.getFieldValue('type') || 'N/A';
             const userValue = AL.fields.getFieldValue('user') || 'N/A';
+            const updatedOnValue = AL.fields.getFieldValue('updated_on') || '';
             const prefixText = AL.prefixes.activePrefix ? `Prefix: ${AL.prefixes.activePrefix.label} (${AL.prefixes.activeStickyCount})` : '';
+
+            // Determine ticker styling based on priority rules
+            let bgColor = '#2a2a2a';  // default
+            let textColor = '#e0e0e0'; // default
+            let prefixColor = '#ff9800'; // default orange
+
+            // Priority 1: Updated On has value (not empty and not "—")
+            if (updatedOnValue && updatedOnValue !== '—' && updatedOnValue.trim() !== '') {
+                bgColor = '#f44336';  // red
+                textColor = '#ffffff'; // white
+                prefixColor = '#ffd700'; // gold for better visibility on red
+            }
+            // Priority 2: Type is Deploy/Deployment
+            else if (typeValue && (typeValue.toLowerCase() === 'deploy' || typeValue.toLowerCase() === 'deployment')) {
+                bgColor = '#ffeb3b';  // yellow
+                textColor = '#000000'; // black
+                prefixColor = '#ff6f00'; // dark orange for visibility on yellow
+            }
+            // Priority 3: Type is Return
+            else if (typeValue && typeValue.toLowerCase() === 'return') {
+                bgColor = '#4CAF50';  // green
+                textColor = '#000000'; // black
+                prefixColor = '#1b5e20'; // dark green for visibility
+            }
+
+            // Apply styling to ticker
+            this.ticker.style.backgroundColor = bgColor;
+            this.ticker.style.color = textColor;
 
             this.ticker.innerHTML = `
                 <span style="display: flex; align-items: center;"><span class="al-ticker-status-dot ${modeDotClass}"></span></span>
                 <span>Type: ${typeValue}</span>
                 <span>User: ${userValue}</span>
-                ${prefixText ? `<span style="color: #ff9800;">${prefixText}</span>` : ''}
+                ${prefixText ? `<span style="color: ${prefixColor};">${prefixText}</span>` : ''}
             `;
         },
 
