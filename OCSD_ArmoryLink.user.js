@@ -2875,18 +2875,6 @@
                             </select>
                         </div>
 
-                        <!-- Available Variables Reference -->
-                        <div style="background: #1e1e1e; padding: 12px; margin-bottom: 15px; border-radius: 4px; border-left: 3px solid #4CAF50;">
-                            <div style="font-weight: bold; margin-bottom: 8px; font-size: 13px;">📋 Available Variables:</div>
-                            <div style="font-size: 11px; line-height: 1.6;">
-                                <div style="margin-bottom: 4px;"><code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${scanRaw}</code> - Full scanned barcode (raw)</div>
-                                <div style="margin-bottom: 4px;"><code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${cleanScan}</code> - Scanned barcode (trimmed)</div>
-                                <div style="margin-bottom: 4px;"><code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${last4}</code> - Last 4 characters of barcode</div>
-                                <div style="margin-bottom: 4px;"><code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${directive}</code> - Directive value (Deployment/Return)</div>
-                                <div style="margin-bottom: 4px;"><code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${group1}</code>, <code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${group2}</code>, ... - Regex capture groups</div>
-                            </div>
-                        </div>
-
                         <!-- Variable Insertion Tool -->
                         <div class="al-form-group" style="background: #252525; padding: 12px; margin-bottom: 15px; border-radius: 4px;">
                             <label style="font-weight: bold; margin-bottom: 8px; display: block;">🔧 Insert Variable</label>
@@ -2927,7 +2915,7 @@
                             <div class="al-form-group">
                                 <label>Value *</label>
                                 <input type="text" class="al-input" id="al-action-field-value" placeholder="e.g., \${scanRaw}, \${cleanScan}, \${group1}">
-                                <small>Use variables from reference above</small>
+                                <small>Use dropdown above to insert variables at cursor</small>
                             </div>
                         </div>
 
@@ -2957,7 +2945,7 @@
                             <div class="al-form-group">
                                 <label>Message *</label>
                                 <input type="text" class="al-input" id="al-action-toast-message" placeholder="e.g., Scanned: \${last4}">
-                                <small>Use variables from reference above</small>
+                                <small>Use dropdown above to insert variables at cursor</small>
                             </div>
                             <div class="al-form-group">
                                 <label>Level</label>
@@ -2975,7 +2963,7 @@
                             <div class="al-form-group">
                                 <label>Speech Text *</label>
                                 <input type="text" class="al-input" id="al-action-speech-text" placeholder="e.g., PID \${last4}">
-                                <small>Use variables from reference above</small>
+                                <small>Use dropdown above to insert variables at cursor</small>
                             </div>
                         </div>
                     </div>
