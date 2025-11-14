@@ -1298,6 +1298,10 @@
                     this.renderFields(content);
                     break;
 
+                case 'rules':
+                    this.renderRules(content);
+                    break;
+
                 default:
                     content.innerHTML = `<p>Tab: ${tabName} (content will be implemented in future passes)</p>`;
             }
@@ -1478,6 +1482,196 @@
                 if (confirm('Reset all fields to defaults?')) {
                     AL.fields.resetDefaults();
                     this.renderFields(content);
+                }
+            };
+        },
+
+        /**
+         * Render Rules tab
+         */
+        renderRules(content) {
+            content.innerHTML = `
+                <h3>Rules Configuration</h3>
+                <p style="margin-bottom: 15px;">Configure pattern matching rules for barcode processing.</p>
+
+                <!-- Pattern Tester -->
+                <div style="background: #2a2a2a; padding: 12px; margin-bottom: 20px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 10px 0;">Pattern Tester</h4>
+                    <input type="text" id="al_rule_test_input" class="al-input" placeholder="Enter test barcode..." style="margin-bottom: 10px;">
+                    <button class="al-btn al-btn-secondary" id="al_rule_test_btn">Test Pattern</button>
+                    <div id="al_rule_test_result" style="margin-top: 10px; padding: 10px; background: #1e1e1e; border-radius: 4px; min-height: 40px;"></div>
+                </div>
+
+                <!-- Action Buttons -->
+                <button class="al-btn al-btn-secondary" id="al_rules_add" style="margin-bottom: 15px;">Add Rule</button>
+                <button class="al-btn al-btn-danger" id="al_rules_reset">Reset Defaults</button>
+
+                <!-- Rules List -->
+                <div id="al_rules_list" style="margin-top: 15px;"></div>
+            `;
+
+            // Render rules list
+            const rulesList = document.getElementById('al_rules_list');
+            AL.rules.rules.forEach((rule, index) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'background: #2a2a2a; padding: 12px; margin-bottom: 10px; border-radius: 4px;';
+
+                // Format actions for display
+                const actionsDisplay = rule.actions.map(a => {
+                    if (a.type === 'setField') return `Set ${a.field} = ${a.value}`;
+                    if (a.type === 'setType') return `Set type = ${a.value}`;
+                    if (a.type === 'toast') return `Toast: ${a.message || a.title}`;
+                    if (a.type === 'speech') return `Speak: ${a.text}`;
+                    return a.type;
+                }).join(', ');
+
+                row.innerHTML = `
+                    <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                        <input type="checkbox" ${rule.enabled ? 'checked' : ''} data-id="${rule.id}" class="al-rule-enabled" style="margin-right: 8px;">
+                        <strong style="font-size: 14px;">${rule.name}</strong>
+                        <span style="color: #999; margin-left: 8px; font-size: 11px;">(Priority: ${index + 1})</span>
+                    </div>
+                    <div style="margin-bottom: 8px; padding: 8px; background: #1e1e1e; border-radius: 3px; font-family: monospace; font-size: 12px;">
+                        <div style="margin-bottom: 4px;"><strong>Pattern:</strong> ${AL.utils.escapeHtml(rule.pattern)}</div>
+                        <div style="margin-bottom: 4px;"><strong>Type:</strong> ${rule.patternType}</div>
+                        ${rule.useDirective ? `<div style="margin-bottom: 4px;"><strong>Directive:</strong> ${rule.directiveChars.join(', ')} → ${rule.directiveChars.map(c => AL.rules.directiveMap[c] || c).join(', ')}</div>` : ''}
+                        ${rule.speechLabel ? `<div style="margin-bottom: 4px;"><strong>Speech:</strong> ${rule.speechLabel}</div>` : ''}
+                    </div>
+                    <div style="margin-bottom: 8px; padding: 8px; background: #1e1e1e; border-radius: 3px; font-size: 12px;">
+                        <strong>Actions:</strong> ${actionsDisplay || 'None'}
+                    </div>
+                    <div>
+                        <button class="al-btn al-btn-secondary al-rule-test" data-id="${rule.id}" style="font-size: 12px;">Test</button>
+                        <button class="al-btn al-btn-secondary al-rule-edit" data-id="${rule.id}" style="font-size: 12px;">Edit</button>
+                        <button class="al-btn al-btn-secondary al-rule-move-up" data-id="${rule.id}" style="font-size: 12px;" ${index === 0 ? 'disabled' : ''}>↑</button>
+                        <button class="al-btn al-btn-secondary al-rule-move-down" data-id="${rule.id}" style="font-size: 12px;" ${index === AL.rules.rules.length - 1 ? 'disabled' : ''}>↓</button>
+                        <button class="al-btn al-btn-danger al-rule-delete" data-id="${rule.id}" style="font-size: 12px;">Delete</button>
+                    </div>
+                `;
+                rulesList.appendChild(row);
+            });
+
+            // Event listeners - Pattern Tester
+            document.getElementById('al_rule_test_btn').onclick = () => {
+                const input = document.getElementById('al_rule_test_input').value.trim();
+                const resultDiv = document.getElementById('al_rule_test_result');
+
+                if (!input) {
+                    resultDiv.innerHTML = '<span style="color: #999;">Enter a barcode to test</span>';
+                    return;
+                }
+
+                const match = AL.rules.matchScan(input);
+                if (match) {
+                    const varsHtml = Object.entries(match.variables)
+                        .map(([key, val]) => `<div><strong>${key}:</strong> ${AL.utils.escapeHtml(val || '(empty)')}</div>`)
+                        .join('');
+
+                    resultDiv.innerHTML = `
+                        <div style="color: #4ade80; margin-bottom: 8px;">✓ Matched Rule: <strong>${match.rule.name}</strong></div>
+                        <div style="font-size: 11px; color: #999;">Variables:</div>
+                        <div style="font-size: 11px; margin-left: 10px;">${varsHtml}</div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = '<span style="color: #fbbf24;">⚠ No matching rules</span>';
+                }
+            };
+
+            document.getElementById('al_rule_test_input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    document.getElementById('al_rule_test_btn').click();
+                }
+            });
+
+            // Event listeners - Enable/Disable
+            document.querySelectorAll('.al-rule-enabled').forEach(el => {
+                el.onchange = () => {
+                    AL.rules.updateRule(el.dataset.id, { enabled: el.checked });
+                    AL.ui.showToast('Rule Updated', `Rule ${el.checked ? 'enabled' : 'disabled'}`, 'success');
+                };
+            });
+
+            // Event listeners - Test individual rule
+            document.querySelectorAll('.al-rule-test').forEach(el => {
+                el.onclick = () => {
+                    const rule = AL.rules.rules.find(r => r.id === el.dataset.id);
+                    if (!rule) return;
+
+                    const testInput = prompt(`Test pattern for rule "${rule.name}"\n\nPattern: ${rule.pattern}\nType: ${rule.patternType}\n\nEnter test barcode:`);
+                    if (!testInput) return;
+
+                    const matchResult = AL.rules.testPattern(testInput, rule);
+                    if (matchResult) {
+                        const varsText = Object.entries(matchResult.variables)
+                            .map(([key, val]) => `${key}: ${val || '(empty)'}`)
+                            .join('\n');
+                        alert(`✓ Match Success!\n\nVariables:\n${varsText}`);
+                    } else {
+                        alert('✗ No match');
+                    }
+                };
+            });
+
+            // Event listeners - Edit
+            document.querySelectorAll('.al-rule-edit').forEach(el => {
+                el.onclick = () => {
+                    const rule = AL.rules.rules.find(r => r.id === el.dataset.id);
+                    if (!rule) return;
+
+                    AL.ui.showToast('Not Implemented', 'Rule editing UI coming in next phase', 'info');
+                    // TODO: Implement rule editor modal/form
+                };
+            });
+
+            // Event listeners - Move Up/Down
+            document.querySelectorAll('.al-rule-move-up').forEach(el => {
+                el.onclick = () => {
+                    const index = AL.rules.rules.findIndex(r => r.id === el.dataset.id);
+                    if (index > 0) {
+                        [AL.rules.rules[index - 1], AL.rules.rules[index]] = [AL.rules.rules[index], AL.rules.rules[index - 1]];
+                        AL.rules.save();
+                        this.renderRules(content);
+                    }
+                };
+            });
+
+            document.querySelectorAll('.al-rule-move-down').forEach(el => {
+                el.onclick = () => {
+                    const index = AL.rules.rules.findIndex(r => r.id === el.dataset.id);
+                    if (index >= 0 && index < AL.rules.rules.length - 1) {
+                        [AL.rules.rules[index], AL.rules.rules[index + 1]] = [AL.rules.rules[index + 1], AL.rules.rules[index]];
+                        AL.rules.save();
+                        this.renderRules(content);
+                    }
+                };
+            });
+
+            // Event listeners - Delete
+            document.querySelectorAll('.al-rule-delete').forEach(el => {
+                el.onclick = () => {
+                    const rule = AL.rules.rules.find(r => r.id === el.dataset.id);
+                    if (!rule) return;
+
+                    if (confirm(`Delete rule "${rule.name}"?`)) {
+                        AL.rules.deleteRule(el.dataset.id);
+                        this.renderRules(content);
+                        AL.ui.showToast('Rule Deleted', `Removed rule: ${rule.name}`, 'success');
+                    }
+                };
+            });
+
+            // Event listeners - Add Rule
+            document.getElementById('al_rules_add').onclick = () => {
+                AL.ui.showToast('Not Implemented', 'Add rule UI coming in next phase', 'info');
+                // TODO: Implement add rule modal/form
+            };
+
+            // Event listeners - Reset Defaults
+            document.getElementById('al_rules_reset').onclick = () => {
+                if (confirm('Reset all rules to defaults? This will delete all custom rules.')) {
+                    AL.rules.resetDefaults();
+                    this.renderRules(content);
+                    AL.ui.showToast('Rules Reset', 'All rules restored to defaults', 'success');
                 }
             };
         },
