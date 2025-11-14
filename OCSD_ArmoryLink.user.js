@@ -4296,7 +4296,7 @@
 
             // Setup field monitoring once with bounded retry
             let retryCount = 0;
-            const maxRetries = 5;
+            const maxRetries = 10;
 
             const setupFieldMonitors = () => {
                 const typeField = AL.fields.getField('type');
@@ -4362,14 +4362,14 @@
 
             // Try immediately
             if (!setupFieldMonitors()) {
-                // Retry with delays
+                // Retry with delays (2 second intervals to allow ServiceNow forms to load)
                 const retryInterval = setInterval(() => {
                     if (setupFieldMonitors()) {
                         clearInterval(retryInterval);
                     } else if (retryCount >= maxRetries) {
                         clearInterval(retryInterval);
                     }
-                }, 1000);
+                }, 2000);
             }
 
             // Monitor for tab switches in ServiceNow workspace
