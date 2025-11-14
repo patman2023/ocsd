@@ -292,10 +292,16 @@
          */
         getActivePageRoot() {
             try {
-                // Method 1: Find the selected tab and its corresponding panel
+                // Method 1: Modern ServiceNow workspace - find form within canvas appshell
+                const formView = document.querySelector('sn-canvas-appshell-root macroponent-f51912f4c700201072b211d4d8c26010') ||
+                                document.querySelector('[macroponent*="f51912f4c700201072b211d4d8c26010"]') ||
+                                this.querySelectorDeep('sn-form-layout') ||
+                                this.querySelectorDeep('[role="main"]');
+                if (formView) return formView;
+
+                // Method 2: Find the selected tab and its corresponding panel
                 const selectedTab = this.querySelectorDeep('.sn-chrome-one-tab.is-selected');
                 if (selectedTab) {
-                    // Get the tab ID to find corresponding panel
                     const tabId = selectedTab.getAttribute('id') || selectedTab.getAttribute('aria-controls');
                     if (tabId) {
                         const panel = document.querySelector(`#${tabId}-panel`) ||
@@ -305,14 +311,14 @@
                     }
                 }
 
-                // Method 2: Look for active/visible tab panel by aria-selected or visible state
+                // Method 3: Look for active/visible tab panel by aria-selected or visible state
                 const activePanel = this.querySelectorDeep('[role="tabpanel"][aria-hidden="false"]') ||
                                    this.querySelectorDeep('[role="tabpanel"]:not([aria-hidden="true"])') ||
                                    this.querySelectorDeep('.sn-chrome-one-tab-panel.is-active') ||
                                    this.querySelectorDeep('.sn-chrome-one-tab-panel:not(.is-hidden)');
                 if (activePanel) return activePanel;
 
-                // Method 3: Fallback to iframe content (older ServiceNow or single-tab)
+                // Method 4: Fallback to iframe content (older ServiceNow or single-tab)
                 const mainIframe = document.querySelector('iframe[name="gsft_main"]') ||
                                   document.querySelector('iframe.gsft_main') ||
                                   this.querySelectorDeep('iframe[id*="frame"]');
@@ -320,8 +326,8 @@
                     return mainIframe.contentDocument;
                 }
 
-                // Method 4: Last resort - return document (search entire page)
-                console.warn('[utils] Could not find active page root, searching entire document');
+                // Method 5: Just use document as the entire page (works for single forms)
+                // Suppress warning for single-form pages
                 return document;
             } catch (error) {
                 console.error('[utils] Error finding active page root:', error);
