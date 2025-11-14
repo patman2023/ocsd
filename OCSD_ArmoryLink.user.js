@@ -1506,55 +1506,63 @@
         updateTicker() {
             if (!this.ticker) return;
 
-            // Get mode and determine dot class
-            const mode = AL.capture.mode;
-            const modeDotClass = `mode-${mode}`;
+            try {
+                // Get mode and determine dot class
+                const mode = AL.capture.mode;
+                const modeDotClass = `mode-${mode}`;
 
-            // Get active page context (ensures ticker shows current page's data only)
-            const ctx = AL.pageState.getActivePageContext();
+                // Get active page context (ensures ticker shows current page's data only)
+                const ctx = AL.pageState && AL.pageState.getActivePageContext ?
+                    AL.pageState.getActivePageContext() :
+                    { type: null, userLast: null, vehicle: null, weapon: null, updatedOn: null };
 
-            const typeValue = ctx.type || 'N/A';
-            const userValue = ctx.userLast || 'Unknown';
-            const vehicleValue = ctx.vehicle || '';
-            const weaponValue = ctx.weapon || '';
-            const prefixText = AL.prefixes.activePrefix ? `Prefix: ${AL.prefixes.activePrefix.label} (${AL.prefixes.activeStickyCount})` : '';
+                const typeValue = ctx.type || 'N/A';
+                const userValue = ctx.userLast || 'Unknown';
+                const vehicleValue = ctx.vehicle || '';
+                const weaponValue = ctx.weapon || '';
+                const prefixText = AL.prefixes.activePrefix ? `Prefix: ${AL.prefixes.activePrefix.label} (${AL.prefixes.activeStickyCount})` : '';
 
-            // Determine ticker styling using helper function
-            const tickerStyle = AL.pageState.deriveTickerStyle(ctx);
+                // Determine ticker styling using helper function
+                const tickerStyle = AL.pageState && AL.pageState.deriveTickerStyle ?
+                    AL.pageState.deriveTickerStyle(ctx) :
+                    'default';
 
-            let bgColor = '#2a2a2a';  // default
-            let textColor = '#e0e0e0'; // default
-            let prefixColor = '#ff9800'; // default orange
+                let bgColor = '#2a2a2a';  // default
+                let textColor = '#e0e0e0'; // default
+                let prefixColor = '#ff9800'; // default orange
 
-            if (tickerStyle === 'updated') {
-                // Priority 1: Record updated (Updated On has value)
-                bgColor = '#f44336';  // red
-                textColor = '#ffffff'; // white
-                prefixColor = '#ffd700'; // gold for better visibility on red
-            } else if (tickerStyle === 'deploy') {
-                // Priority 2: Type is Deploy/Deployment
-                bgColor = '#ffeb3b';  // yellow
-                textColor = '#000000'; // black
-                prefixColor = '#ff6f00'; // dark orange for visibility on yellow
-            } else if (tickerStyle === 'return') {
-                // Priority 3: Type is Return
-                bgColor = '#4CAF50';  // green
-                textColor = '#000000'; // black
-                prefixColor = '#1b5e20'; // dark green for visibility
+                if (tickerStyle === 'updated') {
+                    // Priority 1: Record updated (Updated On has value)
+                    bgColor = '#f44336';  // red
+                    textColor = '#ffffff'; // white
+                    prefixColor = '#ffd700'; // gold for better visibility on red
+                } else if (tickerStyle === 'deploy') {
+                    // Priority 2: Type is Deploy/Deployment
+                    bgColor = '#ffeb3b';  // yellow
+                    textColor = '#000000'; // black
+                    prefixColor = '#ff6f00'; // dark orange for visibility on yellow
+                } else if (tickerStyle === 'return') {
+                    // Priority 3: Type is Return
+                    bgColor = '#4CAF50';  // green
+                    textColor = '#000000'; // black
+                    prefixColor = '#1b5e20'; // dark green for visibility
+                }
+
+                // Apply styling to ticker
+                this.ticker.style.backgroundColor = bgColor;
+                this.ticker.style.color = textColor;
+
+                this.ticker.innerHTML = `
+                    <span style="display: flex; align-items: center;"><span class="al-ticker-status-dot ${modeDotClass}"></span></span>
+                    <span>Type: ${typeValue}</span>
+                    <span>User: ${userValue}</span>
+                    ${vehicleValue ? `<span>Vehicle: ${vehicleValue}</span>` : ''}
+                    ${weaponValue ? `<span>Weapon: ${weaponValue}</span>` : ''}
+                    ${prefixText ? `<span style="color: ${prefixColor};">${prefixText}</span>` : ''}
+                `;
+            } catch (error) {
+                console.error('[ui] Error updating ticker:', error);
             }
-
-            // Apply styling to ticker
-            this.ticker.style.backgroundColor = bgColor;
-            this.ticker.style.color = textColor;
-
-            this.ticker.innerHTML = `
-                <span style="display: flex; align-items: center;"><span class="al-ticker-status-dot ${modeDotClass}"></span></span>
-                <span>Type: ${typeValue}</span>
-                <span>User: ${userValue}</span>
-                ${vehicleValue ? `<span>Vehicle: ${vehicleValue}</span>` : ''}
-                ${weaponValue ? `<span>Weapon: ${weaponValue}</span>` : ''}
-                ${prefixText ? `<span style="color: ${prefixColor};">${prefixText}</span>` : ''}
-            `;
         },
 
         /**
@@ -3810,45 +3818,58 @@
          * Read fields and update active page context
          */
         readFieldsAndUpdate() {
-            const pageId = this.computePageId();
-            const ctx = this.getOrCreatePageContext(pageId);
+            try {
+                const pageId = this.computePageId();
+                const ctx = this.getOrCreatePageContext(pageId);
 
-            // Read field values
-            const typeValue = AL.fields.getFieldValue('type');
-            const userValue = AL.fields.getFieldValue('user');
-            const vehicleValue = AL.fields.getFieldValue('vehicle');
-            const weaponValue = AL.fields.getFieldValue('weapon');
-            const taserValue = AL.fields.getFieldValue('taser');
-            const patrolValue = AL.fields.getFieldValue('patrol');
-            const controlOneRadioValue = AL.fields.getFieldValue('controlOneRadio');
-            const updatedOnValue = AL.fields.getFieldValue('updated_on');
+                // Read field values (safely)
+                if (!AL.fields || !AL.fields.getFieldValue) {
+                    AL.stubs.debug('[pageState] Fields module not ready, skipping field read');
+                    this.setActivePageId(pageId);
+                    return ctx;
+                }
 
-            // Update context
-            ctx.type = typeValue;
-            ctx.userFull = userValue;
-            ctx.userLast = this.extractLastName(userValue);
-            ctx.vehicle = vehicleValue;
-            ctx.weapon = weaponValue;
-            ctx.taser = taserValue;
-            ctx.patrol = patrolValue;
-            ctx.controlOneRadio = controlOneRadioValue;
-            ctx.updatedOn = updatedOnValue;
+                const typeValue = AL.fields.getFieldValue('type');
+                const userValue = AL.fields.getFieldValue('user');
+                const vehicleValue = AL.fields.getFieldValue('vehicle');
+                const weaponValue = AL.fields.getFieldValue('weapon');
+                const taserValue = AL.fields.getFieldValue('taser');
+                const patrolValue = AL.fields.getFieldValue('patrol');
+                const controlOneRadioValue = AL.fields.getFieldValue('controlOneRadio');
+                const updatedOnValue = AL.fields.getFieldValue('updated_on');
 
-            // Set type icon
-            if (typeValue) {
-                if (typeValue.toLowerCase().includes('deploy')) {
-                    ctx.typeIcon = '🟡';
-                } else if (typeValue.toLowerCase().includes('return')) {
-                    ctx.typeIcon = '🟢';
+                // Update context
+                ctx.type = typeValue;
+                ctx.userFull = userValue;
+                ctx.userLast = this.extractLastName(userValue);
+                ctx.vehicle = vehicleValue;
+                ctx.weapon = weaponValue;
+                ctx.taser = taserValue;
+                ctx.patrol = patrolValue;
+                ctx.controlOneRadio = controlOneRadioValue;
+                ctx.updatedOn = updatedOnValue;
+
+                // Set type icon
+                if (typeValue) {
+                    if (typeValue.toLowerCase().includes('deploy')) {
+                        ctx.typeIcon = '🟡';
+                    } else if (typeValue.toLowerCase().includes('return')) {
+                        ctx.typeIcon = '🟢';
+                    } else {
+                        ctx.typeIcon = '⚫';
+                    }
                 } else {
                     ctx.typeIcon = '⚫';
                 }
-            } else {
-                ctx.typeIcon = '⚫';
-            }
 
-            this.setActivePageId(pageId);
-            return ctx;
+                this.setActivePageId(pageId);
+                return ctx;
+            } catch (error) {
+                AL.stubs.debug('[pageState] Error in readFieldsAndUpdate:', error);
+                // Return a safe default context
+                const pageId = this.activePageId || 'default';
+                return this.getOrCreatePageContext(pageId);
+            }
         },
 
         /**
@@ -3896,40 +3917,53 @@
          * Call this on init and whenever tab/record changes
          */
         async refreshActivePage(withRetry = false) {
-            const pageId = this.computePageId();
-            const ctx = this.getOrCreatePageContext(pageId);
-            this.setActivePageId(pageId);
+            try {
+                const pageId = this.computePageId();
+                const ctx = this.getOrCreatePageContext(pageId);
+                this.setActivePageId(pageId);
 
-            if (withRetry) {
-                // For tab switches, retry with delays to wait for fields to load
-                for (let i = 0; i < 5; i++) {
-                    await new Promise(resolve => setTimeout(resolve, i === 0 ? 800 : 400));
-                    this.readFieldsAndUpdate();
+                if (withRetry) {
+                    // For tab switches, retry with delays to wait for fields to load
+                    for (let i = 0; i < 5; i++) {
+                        await new Promise(resolve => setTimeout(resolve, i === 0 ? 800 : 400));
+                        this.readFieldsAndUpdate();
 
-                    // Check if we got meaningful data
-                    const currentCtx = this.getActivePageContext();
-                    if (currentCtx.type || currentCtx.userFull) {
-                        break;
+                        // Check if we got meaningful data
+                        const currentCtx = this.getActivePageContext();
+                        if (currentCtx.type || currentCtx.userFull) {
+                            break;
+                        }
                     }
+                } else {
+                    // Immediate read
+                    this.readFieldsAndUpdate();
                 }
-            } else {
-                // Immediate read
-                this.readFieldsAndUpdate();
-            }
 
-            // Update UI components
-            this.refreshUI();
+                // Update UI components
+                this.refreshUI();
+            } catch (error) {
+                AL.stubs.debug('[pageState] Error in refreshActivePage:', error);
+            }
         },
 
         /**
          * Refresh UI components (ticker and tab title)
          */
         refreshUI() {
-            if (AL.tabTitle && AL.tabTitle.update) {
-                AL.tabTitle.update();
+            try {
+                if (AL.tabTitle && AL.tabTitle.update) {
+                    AL.tabTitle.update();
+                }
+            } catch (error) {
+                AL.stubs.debug('[pageState] Error updating tab title:', error);
             }
-            if (AL.ui && AL.ui.updateTicker) {
-                AL.ui.updateTicker();
+
+            try {
+                if (AL.ui && AL.ui.updateTicker) {
+                    AL.ui.updateTicker();
+                }
+            } catch (error) {
+                AL.stubs.debug('[pageState] Error updating ticker:', error);
             }
         },
 
@@ -4630,10 +4664,14 @@
                     AL.activeContext.startMonitoring();
                 }
 
-                // Refresh active page to load initial state
-                if (AL.pageState && AL.pageState.refreshActivePage) {
-                    AL.pageState.refreshActivePage();
-                }
+                // Refresh active page to load initial state (delayed and safe)
+                setTimeout(() => {
+                    if (AL.pageState && AL.pageState.refreshActivePage) {
+                        AL.pageState.refreshActivePage().catch(err => {
+                            console.error('[init] Error in refreshActivePage:', err);
+                        });
+                    }
+                }, 500);
 
                 console.log('[init] UI initialized successfully');
             } catch (error) {
