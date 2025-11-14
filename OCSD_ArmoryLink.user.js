@@ -3603,7 +3603,78 @@
                 this.originalTooltip = tabLabel.getAttribute('data-tooltip');
             }
             this.update();
+            this.startMonitoring();
             console.log('[tabTitle] Initialized');
+        },
+
+        /**
+         * Start monitoring field changes for automatic updates
+         */
+        startMonitoring() {
+            // Monitor Type and User fields for changes
+            const monitorField = (fieldKey) => {
+                const field = AL.fields.getField(fieldKey);
+                if (!field) return;
+
+                const element = AL.utils.findElement(field.selector, field.selectorPath);
+                if (!element) return;
+
+                // For Type field (combobox in shadow DOM), monitor the button text changes
+                if (fieldKey === 'type' && element.getAttribute('role') === 'combobox') {
+                    // Create a MutationObserver to watch for text changes in the combobox
+                    const observer = new MutationObserver(() => {
+                        console.log('[tabTitle] Type field changed, updating...');
+                        this.update();
+                        if (AL.ui && AL.ui.updateTicker) {
+                            AL.ui.updateTicker();
+                        }
+                    });
+
+                    observer.observe(element, {
+                        childList: true,
+                        subtree: true,
+                        characterData: true
+                    });
+
+                    console.log('[tabTitle] Monitoring Type field for changes');
+                    return;
+                }
+
+                // For regular input fields, listen to change and input events
+                if (element.tagName === 'INPUT' || element.tagName === 'SELECT' || element.tagName === 'TEXTAREA') {
+                    element.addEventListener('change', () => {
+                        console.log(`[tabTitle] ${fieldKey} field changed, updating...`);
+                        this.update();
+                        if (AL.ui && AL.ui.updateTicker) {
+                            AL.ui.updateTicker();
+                        }
+                    });
+
+                    element.addEventListener('input', () => {
+                        console.log(`[tabTitle] ${fieldKey} field input, updating...`);
+                        this.update();
+                        if (AL.ui && AL.ui.updateTicker) {
+                            AL.ui.updateTicker();
+                        }
+                    });
+
+                    console.log(`[tabTitle] Monitoring ${fieldKey} field for changes`);
+                }
+            };
+
+            // Monitor key fields
+            monitorField('type');
+            monitorField('user');
+
+            // Also set up a periodic update every 2 seconds as a backup
+            setInterval(() => {
+                this.update();
+                if (AL.ui && AL.ui.updateTicker) {
+                    AL.ui.updateTicker();
+                }
+            }, 2000);
+
+            console.log('[tabTitle] Field monitoring started');
         },
 
         /**
