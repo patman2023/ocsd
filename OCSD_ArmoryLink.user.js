@@ -3418,10 +3418,48 @@
          */
         getFieldValue(key) {
             const field = this.getField(key);
-            if (!field) return null;
+            if (!field) {
+                if (key === 'user') {
+                    console.log('[fields] 🔍 DEBUG User field: Field definition NOT FOUND');
+                }
+                return null;
+            }
+
+            if (key === 'user') {
+                console.log('[fields] 🔍 DEBUG User field definition:', {
+                    selector: field.selector,
+                    selectorPath: field.selectorPath,
+                    kind: field.kind
+                });
+            }
 
             const element = AL.utils.findElement(field.selector, field.selectorPath);
-            if (!element) return null;
+
+            if (!element) {
+                if (key === 'user') {
+                    console.log('[fields] 🔍 DEBUG User field: Element NOT FOUND with selector:', field.selector);
+                    // Try to see if there are ANY input elements with aria-label
+                    const allInputsWithAriaLabel = document.querySelectorAll('input[aria-label]');
+                    console.log('[fields] 🔍 DEBUG Found', allInputsWithAriaLabel.length, 'input elements with aria-label');
+                    if (allInputsWithAriaLabel.length > 0) {
+                        console.log('[fields] 🔍 DEBUG First 5 aria-labels:',
+                            Array.from(allInputsWithAriaLabel).slice(0, 5).map(el => el.getAttribute('aria-label')));
+                    }
+                }
+                return null;
+            }
+
+            if (key === 'user') {
+                console.log('[fields] 🔍 DEBUG User field element FOUND:', {
+                    tagName: element.tagName,
+                    type: element.type,
+                    value: element.value,
+                    ariaLabel: element.getAttribute('aria-label'),
+                    role: element.getAttribute('role'),
+                    classList: Array.from(element.classList || []),
+                    textContent: element.textContent?.substring(0, 50)
+                });
+            }
 
             try {
                 // Special handling for Type field (combobox in shadow DOM)
@@ -3435,18 +3473,33 @@
                     return element.textContent?.trim() || element.getAttribute('aria-label') || null;
                 }
 
+                let result = null;
+
                 // Standard handling for other fields
                 if (element.tagName === 'SELECT') {
-                    return element.options[element.selectedIndex]?.text || element.value;
+                    result = element.options[element.selectedIndex]?.text || element.value;
+                    if (key === 'user') console.log('[fields] 🔍 DEBUG User: Extracted from SELECT:', result);
                 } else if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
-                    return element.value;
+                    result = element.value;
+                    if (key === 'user') console.log('[fields] 🔍 DEBUG User: Extracted from INPUT/TEXTAREA value:', result);
                 } else if (element.tagName === 'BUTTON') {
-                    return element.textContent?.trim() || null;
+                    result = element.textContent?.trim() || null;
+                    if (key === 'user') console.log('[fields] 🔍 DEBUG User: Extracted from BUTTON textContent:', result);
                 } else {
-                    return element.textContent;
+                    result = element.textContent;
+                    if (key === 'user') console.log('[fields] 🔍 DEBUG User: Extracted from textContent:', result);
                 }
+
+                if (key === 'user') {
+                    console.log('[fields] 🔍 DEBUG User field FINAL VALUE:', result);
+                }
+
+                return result;
             } catch (error) {
                 console.error('[fields] Error getting field:', key, error);
+                if (key === 'user') {
+                    console.log('[fields] 🔍 DEBUG User field: EXCEPTION occurred:', error);
+                }
                 return null;
             }
         },
