@@ -610,7 +610,8 @@
             return {
                 // Layout
                 dockMode: 'dock-right',
-                topGap: 0,
+                topGapLeft: 0,
+                topGapRight: 0,
                 panelWidth: 400,
                 panelHeight: 600,
 
@@ -1159,6 +1160,7 @@
             this.createPanel();
             this.createTicker();
             this.createBubble();
+            this.createStripLauncher();
             this.addDebugLog('system', '[ui] Initialized');
         },
 
@@ -1483,6 +1485,68 @@
                     color: #4CAF50;
                 }
 
+                /* Resize Handles */
+                .al-resize-handle {
+                    position: absolute;
+                    z-index: 999999;
+                }
+                .al-resize-handle.left {
+                    left: 0;
+                    top: 10px;
+                    bottom: 10px;
+                    width: 4px;
+                    cursor: ew-resize;
+                }
+                .al-resize-handle.right {
+                    right: 0;
+                    top: 10px;
+                    bottom: 10px;
+                    width: 4px;
+                    cursor: ew-resize;
+                }
+                .al-resize-handle.top {
+                    top: 0;
+                    left: 10px;
+                    right: 10px;
+                    height: 4px;
+                    cursor: ns-resize;
+                }
+                .al-resize-handle.bottom {
+                    bottom: 0;
+                    left: 10px;
+                    right: 10px;
+                    height: 4px;
+                    cursor: ns-resize;
+                }
+                .al-resize-handle.top-left {
+                    top: 0;
+                    left: 0;
+                    width: 10px;
+                    height: 10px;
+                    cursor: nwse-resize;
+                }
+                .al-resize-handle.top-right {
+                    top: 0;
+                    right: 0;
+                    width: 10px;
+                    height: 10px;
+                    cursor: nesw-resize;
+                }
+                .al-resize-handle.bottom-left {
+                    bottom: 0;
+                    left: 0;
+                    width: 10px;
+                    height: 10px;
+                    cursor: nesw-resize;
+                }
+                .al-resize-handle.bottom-right {
+                    bottom: 0;
+                    right: 0;
+                    width: 10px;
+                    height: 10px;
+                    cursor: nwse-resize;
+                }
+
                 /* Bubble Launcher (appears when panel is closed) */
                 #al-bubble {
                     position: fixed;
@@ -1616,9 +1680,18 @@
          * Create main panel
          */
         createPanel() {
+            const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
+
             this.panel = document.createElement('div');
             this.panel.id = 'al-panel';
             this.panel.className = this.dockMode;
+
+            // Apply top gap based on dock mode
+            if (this.dockMode === 'dock-left') {
+                this.panel.style.top = `${settings.topGapLeft || 0}px`;
+            } else if (this.dockMode === 'dock-right') {
+                this.panel.style.top = `${settings.topGapRight || 0}px`;
+            }
 
             // Header
             const header = document.createElement('div');
@@ -1660,6 +1733,9 @@
 
             // Drag functionality for docked → floating conversion
             this.initDragBehavior(header);
+
+            // Add resize handles
+            this.initResizeHandles();
 
             // Render current tab
             this.renderTab(this.currentTab);
@@ -1766,6 +1842,115 @@
             };
 
             header.addEventListener('mousedown', onMouseDown);
+        },
+
+        /**
+         * Initialize resize handles for panel
+         * Adds 8 resize handles (4 edges + 4 corners)
+         */
+        initResizeHandles() {
+            const handles = ['left', 'right', 'top', 'bottom', 'top-left', 'top-right', 'bottom-left', 'bottom-right'];
+            const minWidth = 300;
+            const minHeight = 400;
+
+            handles.forEach(position => {
+                const handle = document.createElement('div');
+                handle.className = `al-resize-handle ${position}`;
+
+                let isResizing = false;
+                let startX = 0;
+                let startY = 0;
+                let startWidth = 0;
+                let startHeight = 0;
+                let startLeft = 0;
+                let startTop = 0;
+
+                const onMouseDown = (e) => {
+                    isResizing = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+
+                    const rect = this.panel.getBoundingClientRect();
+                    startWidth = rect.width;
+                    startHeight = rect.height;
+                    startLeft = rect.left;
+                    startTop = rect.top;
+
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                    e.preventDefault();
+                    e.stopPropagation();
+                };
+
+                const onMouseMove = (e) => {
+                    if (!isResizing) return;
+
+                    const deltaX = e.clientX - startX;
+                    const deltaY = e.clientY - startY;
+
+                    let newWidth = startWidth;
+                    let newHeight = startHeight;
+                    let newLeft = startLeft;
+                    let newTop = startTop;
+
+                    // Calculate new dimensions based on handle position
+                    if (position.includes('right')) {
+                        newWidth = startWidth + deltaX;
+                    }
+                    if (position.includes('left')) {
+                        newWidth = startWidth - deltaX;
+                        newLeft = startLeft + deltaX;
+                    }
+                    if (position.includes('bottom')) {
+                        newHeight = startHeight + deltaY;
+                    }
+                    if (position.includes('top')) {
+                        newHeight = startHeight - deltaY;
+                        newTop = startTop + deltaY;
+                    }
+
+                    // Apply constraints
+                    newWidth = Math.max(minWidth, Math.min(newWidth, window.innerWidth - 20));
+                    newHeight = Math.max(minHeight, Math.min(newHeight, window.innerHeight - 20));
+
+                    // Apply viewport constraints for position
+                    newLeft = Math.max(0, Math.min(newLeft, window.innerWidth - newWidth));
+                    newTop = Math.max(0, Math.min(newTop, window.innerHeight - newHeight));
+
+                    // Apply new dimensions
+                    this.panel.style.width = newWidth + 'px';
+                    this.panel.style.height = newHeight + 'px';
+
+                    // Only update position if panel is floating or if resize affects position
+                    if (this.panel.className === 'float' || position.includes('left') || position.includes('top')) {
+                        this.panel.style.left = newLeft + 'px';
+                        this.panel.style.top = newTop + 'px';
+                    }
+
+                    e.preventDefault();
+                };
+
+                const onMouseUp = () => {
+                    if (isResizing) {
+                        isResizing = false;
+
+                        // Save new dimensions to settings
+                        const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
+                        const rect = this.panel.getBoundingClientRect();
+                        settings.panelWidth = Math.round(rect.width);
+                        settings.panelHeight = Math.round(rect.height);
+                        AL.persistence.set('settings', settings);
+
+                        console.log('[ui] Panel resized to:', settings.panelWidth, 'x', settings.panelHeight);
+                    }
+
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                };
+
+                handle.addEventListener('mousedown', onMouseDown);
+                this.panel.appendChild(handle);
+            });
         },
 
         /**
@@ -1931,9 +2116,41 @@
         /**
          * Show toast notification
          */
+        /**
+         * Play toast notification sound
+         */
+        playToastSound() {
+            try {
+                // Create a simple beep using Web Audio API
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                oscillator.frequency.value = 800; // Frequency in Hz
+                oscillator.type = 'sine';
+
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.2);
+            } catch (error) {
+                // Silently fail if audio playback is blocked or unavailable
+                console.log('[ui] Toast sound playback failed:', error.message);
+            }
+        },
+
         showToast(title, message, level = 'info', duration = 3000) {
             const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
             const position = settings.toastPosition || 'top-right';
+
+            // Play sound if enabled
+            if (settings.toastSound) {
+                this.playToastSound();
+            }
 
             const toast = document.createElement('div');
             toast.className = `al-toast ${position} ${level}`;
@@ -1977,6 +2194,23 @@
             };
 
             document.body.appendChild(this.bubble);
+        },
+
+        /**
+         * Create strip launcher (left-side vertical launcher)
+         */
+        createStripLauncher() {
+            this.stripLauncher = document.createElement('div');
+            this.stripLauncher.id = 'al-strip';
+            this.stripLauncher.textContent = 'ArmoryLink';
+            this.stripLauncher.title = 'Toggle ArmoryLink Panel';
+
+            // Click handler to toggle panel
+            this.stripLauncher.onclick = () => {
+                this.togglePanel();
+            };
+
+            document.body.appendChild(this.stripLauncher);
         },
 
         /**
@@ -2596,6 +2830,18 @@
                         <label>Panel Height (px)</label>
                         <input type="number" class="al-input" id="al-setting-panel-height" value="${settings.panelHeight}" min="400" max="1000">
                     </div>
+
+                    <div class="al-form-group">
+                        <label>Top Gap - Left Dock (px)</label>
+                        <input type="number" class="al-input" id="al-setting-top-gap-left" value="${settings.topGapLeft || 0}" min="0" max="200">
+                        <small>Top offset when panel is docked left</small>
+                    </div>
+
+                    <div class="al-form-group">
+                        <label>Top Gap - Right Dock (px)</label>
+                        <input type="number" class="al-input" id="al-setting-top-gap-right" value="${settings.topGapRight || 0}" min="0" max="200">
+                        <small>Top offset when panel is docked right</small>
+                    </div>
                 </div>
 
                 <!-- Capture Settings -->
@@ -2646,6 +2892,13 @@
                         <div class="al-checkbox-group">
                             <input type="checkbox" id="al-setting-toast-sticky" ${settings.toastSticky ? 'checked' : ''}>
                             <label for="al-setting-toast-sticky" style="margin: 0;">Sticky (requires manual dismiss)</label>
+                        </div>
+                    </div>
+
+                    <div class="al-form-group">
+                        <div class="al-checkbox-group">
+                            <input type="checkbox" id="al-setting-toast-sound" ${settings.toastSound ? 'checked' : ''}>
+                            <label for="al-setting-toast-sound" style="margin: 0;">Play Sound on Toast</label>
                         </div>
                     </div>
                 </div>
@@ -2730,6 +2983,8 @@
             document.getElementById('al-setting-dock-mode').onchange = autoSave;
             document.getElementById('al-setting-panel-width').onchange = autoSave;
             document.getElementById('al-setting-panel-height').onchange = autoSave;
+            document.getElementById('al-setting-top-gap-left').onchange = autoSave;
+            document.getElementById('al-setting-top-gap-right').onchange = autoSave;
 
             // Capture settings - auto-save on change
             document.getElementById('al-setting-scan-throttle').onchange = autoSave;
@@ -2740,6 +2995,7 @@
             document.getElementById('al-setting-toast-position').onchange = autoSave;
             document.getElementById('al-setting-toast-duration').onchange = autoSave;
             document.getElementById('al-setting-toast-sticky').onchange = autoSave;
+            document.getElementById('al-setting-toast-sound').onchange = autoSave;
 
             // Speech settings - auto-save on change
             document.getElementById('al-setting-speech-enabled').onchange = autoSave;
@@ -4225,7 +4481,8 @@
                 dockMode: document.getElementById('al-setting-dock-mode').value,
                 panelWidth: parseInt(document.getElementById('al-setting-panel-width').value),
                 panelHeight: parseInt(document.getElementById('al-setting-panel-height').value),
-                topGap: 0,
+                topGapLeft: parseInt(document.getElementById('al-setting-top-gap-left').value) || 0,
+                topGapRight: parseInt(document.getElementById('al-setting-top-gap-right').value) || 0,
 
                 // Capture
                 captureMode: AL.capture.mode,
@@ -4237,7 +4494,7 @@
                 toastPosition: document.getElementById('al-setting-toast-position').value,
                 toastDuration: parseInt(document.getElementById('al-setting-toast-duration').value),
                 toastSticky: document.getElementById('al-setting-toast-sticky').checked,
-                toastSound: false,
+                toastSound: document.getElementById('al-setting-toast-sound').checked,
 
                 // Speech
                 speechEnabled: document.getElementById('al-setting-speech-enabled').checked,
@@ -4268,9 +4525,19 @@
                 this.showToast('Settings Saved', 'Settings updated successfully', 'success');
             }
 
-            // Apply dock mode change
+            // Apply dock mode change and top gap
             if (this.panel) {
                 this.panel.className = settings.dockMode;
+
+                // Apply top gap based on dock mode
+                if (settings.dockMode === 'dock-left') {
+                    this.panel.style.top = `${settings.topGapLeft}px`;
+                } else if (settings.dockMode === 'dock-right') {
+                    this.panel.style.top = `${settings.topGapRight}px`;
+                } else {
+                    // For float and dock-bottom, don't apply top gap
+                    this.panel.style.top = '';
+                }
             }
 
             // Apply ticker settings
@@ -5701,13 +5968,134 @@
     AL.bwc = {
         // BWC helper - PID extraction, iframe/tab launching, site navigation
         bwcUrl: 'https://evidence.com', // Placeholder - user will configure
-        mode: 'tab', // 'iframe' or 'tab'
+        mode: 'iframe', // 'iframe' or 'tab'
+        iframeContainer: null,
 
         init() {
             const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
             this.bwcUrl = settings.bwcUrl || this.bwcUrl;
             this.mode = settings.bwcMode || this.mode;
             console.log('[bwc] Initialized, mode:', this.mode);
+        },
+
+        /**
+         * Launch BWC in iframe with auto-navigation and fallback
+         */
+        openBwcInIframe(config) {
+            const pid = config.pid || AL.fields.getFieldValue('user');
+            const serial = config.serial || '';
+
+            if (!pid) {
+                if (AL.ui && AL.ui.showToast) {
+                    AL.ui.showToast('BWC Error', 'No user PID found', 'error');
+                }
+                return false;
+            }
+
+            const url = `${this.bwcUrl}`;
+
+            console.log('[bwc] Opening in iframe:', url);
+
+            // Create iframe container in panel
+            if (!this.iframeContainer) {
+                this.iframeContainer = document.createElement('div');
+                this.iframeContainer.id = 'al-bwc-iframe-container';
+                this.iframeContainer.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 10;';
+
+                const closeBtn = document.createElement('button');
+                closeBtn.textContent = '×';
+                closeBtn.className = 'al-btn al-btn-danger';
+                closeBtn.style.cssText = 'position: absolute; top: 10px; right: 10px; z-index: 11;';
+                closeBtn.onclick = () => this.closeIframe();
+
+                this.iframeContainer.appendChild(closeBtn);
+            }
+
+            const iframe = document.createElement('iframe');
+            iframe.style.cssText = 'width: 100%; height: 100%; border: none;';
+            iframe.src = url;
+
+            // Try to load iframe and detect errors
+            let iframeFailed = false;
+
+            iframe.onerror = () => {
+                iframeFailed = true;
+                console.log('[bwc] Iframe load error, falling back to new tab');
+                this.closeIframe();
+                this.fallbackToTab(pid, serial);
+            };
+
+            iframe.onload = () => {
+                if (iframeFailed) return;
+
+                console.log('[bwc] Iframe loaded, attempting auto-navigation');
+
+                // Try to auto-navigate within iframe
+                try {
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+
+                    // Wait a bit for page to load, then try to search
+                    setTimeout(() => {
+                        try {
+                            // Look for search field and enter PID
+                            const searchField = iframeDoc.querySelector('input[type="search"], input[name="search"], input[placeholder*="search" i]');
+                            if (searchField) {
+                                searchField.value = pid;
+                                searchField.dispatchEvent(new Event('input', { bubbles: true }));
+                                searchField.dispatchEvent(new Event('change', { bubbles: true }));
+
+                                // Try to find and click search button
+                                const searchBtn = iframeDoc.querySelector('button[type="submit"], button.search-btn, input[type="submit"]');
+                                if (searchBtn) {
+                                    searchBtn.click();
+                                }
+                            }
+                        } catch (navError) {
+                            console.log('[bwc] Auto-navigation blocked (CORS):', navError.message);
+                        }
+                    }, 1500);
+
+                } catch (e) {
+                    // Cross-origin iframe - cannot navigate
+                    console.log('[bwc] Cannot auto-navigate (cross-origin):', e.message);
+                }
+            };
+
+            // Clear existing iframe if any
+            const existingIframe = this.iframeContainer.querySelector('iframe');
+            if (existingIframe) existingIframe.remove();
+
+            this.iframeContainer.appendChild(iframe);
+
+            // Add to panel
+            if (AL.ui.panel) {
+                AL.ui.panel.appendChild(this.iframeContainer);
+            }
+
+            return true;
+        },
+
+        /**
+         * Fallback to opening in new tab
+         */
+        fallbackToTab(pid, serial) {
+            const url = `${this.bwcUrl}?pid=${encodeURIComponent(pid)}&serial=${encodeURIComponent(serial || '')}`;
+            console.log('[bwc] Fallback: Opening in new tab:', url);
+            window.open(url, '_blank');
+
+            if (AL.ui && AL.ui.showToast) {
+                AL.ui.showToast('BWC Opened', 'Opened in new tab (iframe blocked)', 'info');
+            }
+        },
+
+        /**
+         * Close iframe
+         */
+        closeIframe() {
+            if (this.iframeContainer && this.iframeContainer.parentNode) {
+                this.iframeContainer.remove();
+                this.iframeContainer = null;
+            }
         },
 
         /**
@@ -5723,26 +6111,11 @@
                 return false;
             }
 
-            const url = `${this.bwcUrl}?pid=${encodeURIComponent(pid)}&serial=${encodeURIComponent(serial || '')}`;
-
-            console.log('[bwc] Launching:', url);
-
             if (this.mode === 'iframe') {
-                // Create iframe modal (simplified - full implementation would be more complex)
-                if (AL.ui && AL.ui.showToast) {
-                    AL.ui.showToast('BWC Launch', 'Opening in new tab (iframe mode not fully implemented)', 'info');
-                }
-                window.open(url, '_blank');
+                return this.openBwcInIframe({ pid, serial });
             } else {
-                // Open in new tab
-                window.open(url, '_blank');
+                return this.fallbackToTab(pid, serial);
             }
-
-            if (AL.ui && AL.ui.showToast) {
-                AL.ui.showToast('BWC Launched', `PID: ${pid}`, 'success');
-            }
-
-            return true;
         }
     };
 
@@ -5752,13 +6125,134 @@
     AL.x10 = {
         // X10 helper - PID extraction, iframe/tab launching, site navigation
         x10Url: 'https://buy.taser.com', // Placeholder - user will configure
-        mode: 'tab', // 'iframe' or 'tab'
+        mode: 'iframe', // 'iframe' or 'tab'
+        iframeContainer: null,
 
         init() {
             const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
             this.x10Url = settings.x10Url || this.x10Url;
             this.mode = settings.x10Mode || this.mode;
             console.log('[x10] Initialized, mode:', this.mode);
+        },
+
+        /**
+         * Launch X10 in iframe with auto-navigation and fallback
+         */
+        openX10InIframe(config) {
+            const pid = config.pid || AL.fields.getFieldValue('user');
+            const serial = config.serial || '';
+
+            if (!pid) {
+                if (AL.ui && AL.ui.showToast) {
+                    AL.ui.showToast('X10 Error', 'No user PID found', 'error');
+                }
+                return false;
+            }
+
+            const url = `${this.x10Url}`;
+
+            console.log('[x10] Opening in iframe:', url);
+
+            // Create iframe container in panel
+            if (!this.iframeContainer) {
+                this.iframeContainer = document.createElement('div');
+                this.iframeContainer.id = 'al-x10-iframe-container';
+                this.iframeContainer.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 10;';
+
+                const closeBtn = document.createElement('button');
+                closeBtn.textContent = '×';
+                closeBtn.className = 'al-btn al-btn-danger';
+                closeBtn.style.cssText = 'position: absolute; top: 10px; right: 10px; z-index: 11;';
+                closeBtn.onclick = () => this.closeIframe();
+
+                this.iframeContainer.appendChild(closeBtn);
+            }
+
+            const iframe = document.createElement('iframe');
+            iframe.style.cssText = 'width: 100%; height: 100%; border: none;';
+            iframe.src = url;
+
+            // Try to load iframe and detect errors
+            let iframeFailed = false;
+
+            iframe.onerror = () => {
+                iframeFailed = true;
+                console.log('[x10] Iframe load error, falling back to new tab');
+                this.closeIframe();
+                this.fallbackToTab(pid, serial);
+            };
+
+            iframe.onload = () => {
+                if (iframeFailed) return;
+
+                console.log('[x10] Iframe loaded, attempting auto-navigation');
+
+                // Try to auto-navigate within iframe
+                try {
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+
+                    // Wait a bit for page to load, then try to search
+                    setTimeout(() => {
+                        try {
+                            // Look for search field and enter serial number
+                            const searchField = iframeDoc.querySelector('input[type="search"], input[name="search"], input[placeholder*="search" i], input[placeholder*="serial" i]');
+                            if (searchField) {
+                                searchField.value = serial || pid;
+                                searchField.dispatchEvent(new Event('input', { bubbles: true }));
+                                searchField.dispatchEvent(new Event('change', { bubbles: true }));
+
+                                // Try to find and click search button
+                                const searchBtn = iframeDoc.querySelector('button[type="submit"], button.search-btn, input[type="submit"]');
+                                if (searchBtn) {
+                                    searchBtn.click();
+                                }
+                            }
+                        } catch (navError) {
+                            console.log('[x10] Auto-navigation blocked (CORS):', navError.message);
+                        }
+                    }, 1500);
+
+                } catch (e) {
+                    // Cross-origin iframe - cannot navigate
+                    console.log('[x10] Cannot auto-navigate (cross-origin):', e.message);
+                }
+            };
+
+            // Clear existing iframe if any
+            const existingIframe = this.iframeContainer.querySelector('iframe');
+            if (existingIframe) existingIframe.remove();
+
+            this.iframeContainer.appendChild(iframe);
+
+            // Add to panel
+            if (AL.ui.panel) {
+                AL.ui.panel.appendChild(this.iframeContainer);
+            }
+
+            return true;
+        },
+
+        /**
+         * Fallback to opening in new tab
+         */
+        fallbackToTab(pid, serial) {
+            const url = `${this.x10Url}?pid=${encodeURIComponent(pid)}&serial=${encodeURIComponent(serial || '')}`;
+            console.log('[x10] Fallback: Opening in new tab:', url);
+            window.open(url, '_blank');
+
+            if (AL.ui && AL.ui.showToast) {
+                AL.ui.showToast('X10 Opened', 'Opened in new tab (iframe blocked)', 'info');
+            }
+        },
+
+        /**
+         * Close iframe
+         */
+        closeIframe() {
+            if (this.iframeContainer && this.iframeContainer.parentNode) {
+                this.iframeContainer.remove();
+                this.iframeContainer = null;
+            }
         },
 
         /**
@@ -5774,26 +6268,11 @@
                 return false;
             }
 
-            const url = `${this.x10Url}?pid=${encodeURIComponent(pid)}&serial=${encodeURIComponent(serial || '')}`;
-
-            console.log('[x10] Launching:', url);
-
             if (this.mode === 'iframe') {
-                // Create iframe modal (simplified - full implementation would be more complex)
-                if (AL.ui && AL.ui.showToast) {
-                    AL.ui.showToast('X10 Launch', 'Opening in new tab (iframe mode not fully implemented)', 'info');
-                }
-                window.open(url, '_blank');
+                return this.openX10InIframe({ pid, serial });
             } else {
-                // Open in new tab
-                window.open(url, '_blank');
+                return this.fallbackToTab(pid, serial);
             }
-
-            if (AL.ui && AL.ui.showToast) {
-                AL.ui.showToast('X10 Launched', `PID: ${pid}`, 'success');
-            }
-
-            return true;
         }
     };
 
