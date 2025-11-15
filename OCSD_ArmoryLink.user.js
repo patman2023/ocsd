@@ -1147,6 +1147,8 @@
         ticker: null,
         toast: null,
         stripLauncher: null,
+        debugLogs: [],
+        originalConsole: {},
         _lastFocusedVariableInput: null, // Track last focused input for variable insertion
 
         init() {
