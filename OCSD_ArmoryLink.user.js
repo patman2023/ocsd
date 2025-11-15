@@ -896,6 +896,224 @@
             this.panel = document.getElementById('al-panel');
             this.ticker = document.getElementById('al-ticker');
             this.content = document.getElementById('al-content');
+        },
+
+        /**
+         * Get field element by key
+         * Uses pageState to find visible field on active subpage
+         */
+        async getField(key) {
+            const fieldConfig = AL.fields.getField(key);
+            if (!fieldConfig || !fieldConfig.enabled) {
+                console.warn('[elements] Field not found or disabled:', key);
+                return null;
+            }
+
+            const element = AL.pageState?.findVisibleField(key);
+            if (!element) {
+                console.warn('[elements] Element not found or not visible for field:', key);
+                return null;
+            }
+
+            return element;
+        },
+
+        /**
+         * Wait for reference field dropdown option to appear
+         * @param {HTMLElement} field - The reference input field
+         * @param {Function} matcher - Function that returns true for the desired option
+         * @param {Object} options - { timeout: milliseconds }
+         * @returns {Promise<HTMLElement>} The matching option element
+         */
+        async waitForReferenceOption(field, matcher, options = {}) {
+            const timeout = options.timeout || 5000;
+            const startTime = Date.now();
+
+            console.log('[elements] Waiting for reference option...');
+
+            return new Promise((resolve, reject) => {
+                const checkInterval = setInterval(() => {
+                    // Check if timeout exceeded
+                    if (Date.now() - startTime > timeout) {
+                        clearInterval(checkInterval);
+                        console.warn('[elements] Timeout waiting for reference option');
+                        resolve(null);
+                        return;
+                    }
+
+                    // Find options in shadow DOM or regular DOM
+                    const options = AL.utils.querySelectorAllDeep('[role="option"]');
+
+                    if (options && options.length > 0) {
+                        // Try to find matching option
+                        const matchingOption = Array.from(options).find(opt => {
+                            try {
+                                return matcher(opt);
+                            } catch (error) {
+                                console.error('[elements] Error in matcher function:', error);
+                                return false;
+                            }
+                        });
+
+                        if (matchingOption) {
+                            clearInterval(checkInterval);
+                            console.log('[elements] Found matching reference option');
+                            resolve(matchingOption);
+                        }
+                    }
+                }, 100); // Check every 100ms
+            });
+        },
+
+        /**
+         * Wait for reference field to be fully selected
+         * @param {HTMLElement} field - The reference input field
+         * @param {Object} criteria - { pid: string } - criteria to verify selection
+         * @returns {Promise<boolean>} True if selection completed successfully
+         */
+        async waitForReferenceSelection(field, criteria = {}) {
+            const timeout = 3000;
+            const startTime = Date.now();
+
+            console.log('[elements] Waiting for reference selection to complete...');
+
+            return new Promise((resolve) => {
+                const checkInterval = setInterval(() => {
+                    // Check if timeout exceeded
+                    if (Date.now() - startTime > timeout) {
+                        clearInterval(checkInterval);
+                        console.warn('[elements] Timeout waiting for reference selection');
+                        resolve(false);
+                        return;
+                    }
+
+                    // Check if field has a value (display value)
+                    const fieldValue = field.value?.trim();
+
+                    if (fieldValue && fieldValue.length > 0) {
+                        // If PID criteria provided, check if it's included
+                        if (criteria.pid) {
+                            if (fieldValue.includes(criteria.pid)) {
+                                clearInterval(checkInterval);
+                                console.log('[elements] Reference selection completed:', fieldValue);
+                                resolve(true);
+                                return;
+                            }
+                        } else {
+                            // No specific criteria, just check field is populated
+                            clearInterval(checkInterval);
+                            console.log('[elements] Reference selection completed:', fieldValue);
+                            resolve(true);
+                            return;
+                        }
+                    }
+                }, 100); // Check every 100ms
+            });
+        },
+
+        /**
+         * Set User field from PID with full async workflow
+         * Handles ServiceNow reference/typeahead field properly:
+         * 1. Type PID
+         * 2. Wait for dropdown
+         * 3. Click matching option
+         * 4. Wait for selection to complete
+         * 5. Commit & verify
+         * @param {string} pid - The personnel ID to set
+         * @returns {Promise<boolean>} True if successful
+         */
+        async setAndCommitUserFromPid(pid) {
+            console.log('[elements] Setting User field from PID:', pid);
+
+            // 1) Get the User field
+            const field = await this.getField('user');
+            if (!field) {
+                console.error('[elements] User field not found');
+                AL.ui.showToast('Error', 'User field not found', 'error');
+                return false;
+            }
+
+            // 2) Type the PID into the reference input and fire events
+            field.value = pid;
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+            field.dispatchEvent(new Event('change', { bubbles: true }));
+
+            console.log('[elements] Typed PID into User field, waiting for dropdown...');
+
+            // 3) Wait for the suggestion list to appear and populate
+            const option = await this.waitForReferenceOption(field, (opt) => {
+                const txt = opt.textContent || '';
+                // Match either PID or name – prefer PID
+                return txt.includes(pid);
+            }, { timeout: 5000 });
+
+            if (!option) {
+                console.warn('[elements] No reference suggestion found for PID:', pid);
+                AL.ui.showToast('Warning', `No user found for ${pid}`, 'warning');
+                return false;
+            }
+
+            console.log('[elements] Found matching option, clicking...');
+
+            // 4) Click the option to let ServiceNow do its reference selection
+            option.click();
+
+            // 5) Wait until the User field is actually populated with the selected name
+            const selectionComplete = await this.waitForReferenceSelection(field, { pid });
+
+            if (!selectionComplete) {
+                console.warn('[elements] Reference selection did not complete in time');
+                AL.ui.showToast('Warning', 'User selection may not be complete', 'warning');
+                return false;
+            }
+
+            console.log('[elements] User field selection complete');
+
+            // 6) Commit the field (dispatch final change event)
+            field.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Small delay to let ServiceNow process
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // 7) Verify the field has a value
+            const finalValue = field.value?.trim();
+            if (!finalValue || finalValue.length === 0) {
+                console.error('[elements] User field is empty after selection');
+                return false;
+            }
+
+            console.log('[elements] User field successfully set to:', finalValue);
+            AL.ui.showToast('Success', `User set: ${finalValue}`, 'success');
+            return true;
+        },
+
+        /**
+         * Generic set and commit for non-reference fields
+         * @param {string} key - Field key
+         * @param {string} value - Value to set
+         * @returns {Promise<boolean>} True if successful
+         */
+        async setAndCommit(key, value) {
+            console.log('[elements] Setting field:', key, 'to:', value);
+
+            const field = await this.getField(key);
+            if (!field) {
+                console.error('[elements] Field not found:', key);
+                return false;
+            }
+
+            // Set value
+            field.value = value;
+
+            // Dispatch events
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+            field.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Small delay to let ServiceNow process
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            console.log('[elements] Field set successfully:', key);
+            return true;
         }
     };
 
@@ -1055,10 +1273,18 @@
 
             switch (action.type) {
                 case 'setField':
-                    AL.fields.setFieldValue(action.field, action.value);
+                    // Special handling for User field (reference/typeahead)
+                    if (action.field === 'user') {
+                        console.log('[rules] Using async helper for User field');
+                        await AL.elements.setAndCommitUserFromPid(action.value);
+                    } else {
+                        // Use async helper for other fields
+                        await AL.elements.setAndCommit(action.field, action.value);
+                    }
                     break;
 
                 case 'setType':
+                    // Type field still uses old method (has special dropdown handling)
                     AL.fields.setFieldValue('type', action.value);
                     break;
 
@@ -7316,6 +7542,13 @@
             }
 
             try {
+                // User field should NOT be set through this method anymore
+                // Use AL.elements.setAndCommitUserFromPid() instead for proper async workflow
+                if (key === 'user') {
+                    console.warn('[fields] User field should be set using AL.elements.setAndCommitUserFromPid() for proper async workflow');
+                    return false;
+                }
+
                 // Special handling for Type field (combobox in shadow DOM)
                 if (key === 'type' && element.getAttribute('role') === 'combobox') {
                     // Click to open dropdown
@@ -7337,44 +7570,6 @@
                             console.warn('[fields] Option not found for Type:', value);
                         }
                     }, 100);
-
-                    return true;
-                }
-
-                // Special handling for User field (autocomplete reference field)
-                if (key === 'user' && element.tagName === 'INPUT') {
-                    console.log('[fields] Setting User field with autocomplete handling');
-
-                    // Set the value
-                    element.value = value;
-
-                    // Dispatch input event to trigger autocomplete dropdown
-                    element.dispatchEvent(new Event('input', { bubbles: true }));
-
-                    // Wait for autocomplete dropdown to appear, then find and click the option
-                    setTimeout(() => {
-                        // Find the autocomplete options (could be in shadow DOM or regular DOM)
-                        const options = AL.utils.querySelectorAllDeep('[role="option"]');
-                        const matchingOption = Array.from(options).find(opt => {
-                            const text = opt.textContent?.trim();
-                            // Match against the value we're looking for
-                            return text && (text.includes(value) || value.includes(text));
-                        });
-
-                        if (matchingOption) {
-                            matchingOption.click();
-                            console.log('[fields] Selected User from autocomplete:', value);
-
-                            // Dispatch change event after selection
-                            setTimeout(() => {
-                                element.dispatchEvent(new Event('change', { bubbles: true }));
-                            }, 50);
-                        } else {
-                            console.warn('[fields] User option not found in autocomplete for:', value);
-                            // Still dispatch change event even if option not found
-                            element.dispatchEvent(new Event('change', { bubbles: true }));
-                        }
-                    }, 200); // Give autocomplete time to populate
 
                     return true;
                 }
