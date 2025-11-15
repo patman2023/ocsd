@@ -1489,6 +1489,12 @@
             this.createTicker();
             this.createBubble();
             this.createStripLauncher();
+
+            // Initialize visual enhancements after panel is fully rendered
+            setTimeout(() => {
+                this.initVisualEnhancements();
+            }, 100);
+
             this.addDebugLog('system', '[ui] Initialized');
         },
 
@@ -1666,6 +1672,12 @@
                    LIGHT THEME - MODERN PALETTE
                    ============================================ */
                 [data-al-theme="light"] {
+                    /* RGB color values for advanced effects */
+                    --accent-rgb: 59, 130, 246;
+                    --glass-bg-rgb: 255, 255, 255;
+                    --bg-secondary-rgb: 241, 245, 249;
+                    --bg-elevated-rgb: 255, 255, 255;
+
                     /* Backgrounds with subtle gradients */
                     --bg-primary: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
                     --bg-secondary: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
@@ -1702,6 +1714,12 @@
                    DARK THEME - MODERN PALETTE
                    ============================================ */
                 [data-al-theme="dark"] {
+                    /* RGB color values for advanced effects */
+                    --accent-rgb: 56, 189, 248;
+                    --glass-bg-rgb: 15, 23, 42;
+                    --bg-secondary-rgb: 30, 41, 59;
+                    --bg-elevated-rgb: 30, 41, 59;
+
                     /* Rich dark backgrounds */
                     --bg-primary: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
                     --bg-secondary: linear-gradient(135deg, #1e293b 0%, #334155 100%);
@@ -1738,6 +1756,12 @@
                    HIGH CONTRAST - ACCESSIBILITY FOCUSED
                    ============================================ */
                 [data-al-theme="high-contrast"] {
+                    /* RGB color values for advanced effects */
+                    --accent-rgb: 0, 255, 255;
+                    --glass-bg-rgb: 0, 0, 0;
+                    --bg-secondary-rgb: 255, 255, 255;
+                    --bg-elevated-rgb: 0, 0, 0;
+
                     --bg-primary: #000000;
                     --bg-secondary: #ffffff;
                     --bg-elevated: #000000;
@@ -1769,6 +1793,12 @@
                    OCSD SHERIFF - OFFICIAL THEME
                    ============================================ */
                 [data-al-theme="ocsd-sheriff"] {
+                    /* RGB color values for advanced effects */
+                    --accent-rgb: 201, 162, 39;
+                    --glass-bg-rgb: 11, 59, 46;
+                    --bg-secondary-rgb: 11, 59, 46;
+                    --bg-elevated-rgb: 11, 59, 46;
+
                     /* Tactical gradients */
                     --bg-primary: linear-gradient(135deg, #0a0a0a 0%, #1c1c1c 100%);
                     --bg-secondary: linear-gradient(135deg, #0b3b2e 0%, #0d4a3a 100%);
@@ -2020,7 +2050,7 @@
                     flex: 1;
                     overflow-y: auto;
                     padding: var(--space-lg);
-                    background: var(--bg-primary);
+                    background: transparent;
                     scrollbar-width: thin;
                     scrollbar-color: var(--border-medium) transparent;
                 }
@@ -2754,6 +2784,265 @@
                 }
 
                 /* ============================================
+                   20X VISUAL ENHANCEMENTS - ADVANCED ANIMATIONS
+                   ============================================ */
+
+                /* Tactical Effects for OCSD Sheriff Theme */
+                @keyframes tacticalShift {
+                    0%, 100% {
+                        background-position: 0% 50%;
+                    }
+                    50% {
+                        background-position: 100% 50%;
+                    }
+                }
+
+                @keyframes goldShimmer {
+                    0%, 100% {
+                        background-position: -200% center;
+                    }
+                    50% {
+                        background-position: 200% center;
+                    }
+                }
+
+                @keyframes badgePulse {
+                    0%, 100% {
+                        box-shadow: 0 0 20px rgba(201, 162, 39, 0.3),
+                                    inset 0 0 20px rgba(201, 162, 39, 0.1);
+                    }
+                    50% {
+                        box-shadow: 0 0 40px rgba(201, 162, 39, 0.5),
+                                    inset 0 0 30px rgba(201, 162, 39, 0.2);
+                    }
+                }
+
+                @keyframes scanLine {
+                    0% {
+                        top: 0%;
+                        opacity: 0.8;
+                    }
+                    50% {
+                        opacity: 0.3;
+                    }
+                    100% {
+                        top: 100%;
+                        opacity: 0.8;
+                    }
+                }
+
+                /* Cyber Effects for High Contrast Theme */
+                @keyframes cyberGrid {
+                    0% {
+                        transform: translateY(0);
+                    }
+                    100% {
+                        transform: translateY(20px);
+                    }
+                }
+
+                @keyframes glitchText {
+                    0%, 90%, 100% {
+                        transform: translate(0);
+                        opacity: 1;
+                    }
+                    92% {
+                        transform: translate(-2px, 2px);
+                        opacity: 0.8;
+                    }
+                    94% {
+                        transform: translate(2px, -2px);
+                        opacity: 0.9;
+                    }
+                    96% {
+                        transform: translate(-1px, 1px);
+                        opacity: 0.85;
+                    }
+                }
+
+                @keyframes terminalCursor {
+                    0%, 49% {
+                        opacity: 1;
+                    }
+                    50%, 100% {
+                        opacity: 0;
+                    }
+                }
+
+                /* Aurora Effects for Light Theme */
+                @keyframes auroraFlow {
+                    0%, 100% {
+                        background-position: 0% 50%;
+                        filter: hue-rotate(0deg);
+                    }
+                    50% {
+                        background-position: 100% 50%;
+                        filter: hue-rotate(20deg);
+                    }
+                }
+
+                @keyframes iridescent {
+                    0%, 100% {
+                        background-position: 0% 0%;
+                    }
+                    50% {
+                        background-position: 100% 100%;
+                    }
+                }
+
+                /* Neon Effects for Dark Theme */
+                @keyframes neonBorder {
+                    0%, 100% {
+                        border-color: rgba(56, 189, 248, 0.5);
+                        box-shadow: 0 0 20px rgba(56, 189, 248, 0.3),
+                                    inset 0 0 20px rgba(56, 189, 248, 0.1);
+                    }
+                    50% {
+                        border-color: rgba(56, 189, 248, 0.8);
+                        box-shadow: 0 0 40px rgba(56, 189, 248, 0.5),
+                                    inset 0 0 30px rgba(56, 189, 248, 0.2);
+                    }
+                }
+
+                @keyframes neonPulse {
+                    0%, 100% {
+                        box-shadow: 0 0 10px rgba(56, 189, 248, 0.2),
+                                    0 0 20px rgba(56, 189, 248, 0.1),
+                                    0 0 30px rgba(56, 189, 248, 0.05);
+                    }
+                    50% {
+                        box-shadow: 0 0 20px rgba(56, 189, 248, 0.4),
+                                    0 0 40px rgba(56, 189, 248, 0.2),
+                                    0 0 60px rgba(56, 189, 248, 0.1);
+                    }
+                }
+
+                @keyframes electricGlow {
+                    0%, 100% {
+                        filter: brightness(1) saturate(1);
+                    }
+                    50% {
+                        filter: brightness(1.2) saturate(1.5);
+                    }
+                }
+
+                /* Universal Micro-Interactions */
+                @keyframes liquidFill {
+                    0% {
+                        transform: scale(0) translateY(0);
+                        opacity: 0.3;
+                    }
+                    50% {
+                        opacity: 0.2;
+                    }
+                    100% {
+                        transform: scale(2.5) translateY(0);
+                        opacity: 0;
+                    }
+                }
+
+                @keyframes magneticAttract {
+                    0%, 100% {
+                        transform: translate(0, 0);
+                    }
+                    25% {
+                        transform: translate(-2px, -2px);
+                    }
+                    75% {
+                        transform: translate(2px, 2px);
+                    }
+                }
+
+                @keyframes springBounce {
+                    0% {
+                        transform: scale(1);
+                    }
+                    25% {
+                        transform: scale(0.95);
+                    }
+                    50% {
+                        transform: scale(1.05);
+                    }
+                    75% {
+                        transform: scale(0.98);
+                    }
+                    100% {
+                        transform: scale(1);
+                    }
+                }
+
+                @keyframes focusGlow {
+                    0% {
+                        box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0);
+                    }
+                    100% {
+                        box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.2),
+                                    0 0 20px rgba(var(--accent-rgb), 0.3),
+                                    0 0 40px rgba(var(--accent-rgb), 0.1);
+                    }
+                }
+
+                @keyframes toastBounce {
+                    0% {
+                        transform: translateX(400px) scale(0.7);
+                        opacity: 0;
+                    }
+                    50% {
+                        transform: translateX(-20px) scale(1.05);
+                    }
+                    70% {
+                        transform: translateX(10px) scale(0.95);
+                    }
+                    100% {
+                        transform: translateX(0) scale(1);
+                        opacity: 1;
+                    }
+                }
+
+                @keyframes checkmarkDraw {
+                    0% {
+                        stroke-dashoffset: 100;
+                        transform: rotate(0deg) scale(0.8);
+                    }
+                    50% {
+                        transform: rotate(180deg) scale(1.1);
+                    }
+                    100% {
+                        stroke-dashoffset: 0;
+                        transform: rotate(360deg) scale(1);
+                    }
+                }
+
+                @keyframes waveMove {
+                    0% {
+                        transform: translateX(-100%);
+                    }
+                    100% {
+                        transform: translateX(100%);
+                    }
+                }
+
+                @keyframes radarPing {
+                    0% {
+                        transform: scale(1);
+                        opacity: 1;
+                    }
+                    100% {
+                        transform: scale(2.5);
+                        opacity: 0;
+                    }
+                }
+
+                @keyframes gradientShift {
+                    0%, 100% {
+                        background-position: 0% 50%;
+                    }
+                    50% {
+                        background-position: 100% 50%;
+                    }
+                }
+
+                /* ============================================
                    RESPONSIVE ADJUSTMENTS
                    ============================================ */
                 @media (max-width: 768px) {
@@ -2858,6 +3147,524 @@
                     this.panel.style.transition = '';
                 }, 300);
             }
+
+            // Re-apply visual enhancements for the new theme
+            if (this._visualEnhancementsInitialized) {
+                this.applyThemeSpecificEffects();
+            }
+        },
+
+        /**
+         * Initialize 20X Visual Enhancements
+         */
+        initVisualEnhancements() {
+            if (!this.panel) {
+                console.warn('[ui] Panel not found, skipping visual enhancements');
+                return;
+            }
+
+            console.log('[ui] Initializing 20X Visual Enhancements...');
+
+            // Ensure panel maintains fixed positioning
+            const computedStyle = window.getComputedStyle(this.panel);
+            if (computedStyle.position !== 'fixed') {
+                console.warn('[ui] Panel position is not fixed, forcing it');
+                this.panel.style.position = 'fixed';
+            }
+
+            // Add micro-interactions
+            this.addMicroInteractions();
+
+            // Add premium component enhancements
+            this.addPremiumEnhancements();
+
+            // Apply theme-specific effects
+            this.applyThemeSpecificEffects();
+
+            // Mark as initialized
+            this._visualEnhancementsInitialized = true;
+
+            console.log('[ui] Visual enhancements activated!');
+        },
+
+        /**
+         * Add micro-interactions to UI elements
+         */
+        addMicroInteractions() {
+            if (!this.panel) return;
+
+            // Enhanced button interactions with liquid fill effect
+            const addButtonEffects = () => {
+                // Scope to panel only
+                const buttons = this.panel.querySelectorAll('.al-btn, button[class*="al-"]');
+                buttons.forEach(btn => {
+                    if (btn.dataset.enhanced) return; // Skip if already enhanced
+                    btn.dataset.enhanced = 'true';
+
+                    // Add liquid fill on hover
+                    btn.style.position = 'relative';
+                    btn.style.overflow = 'hidden';
+                    btn.style.transition = 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+
+                    btn.addEventListener('mouseenter', function(e) {
+                        this.style.transform = 'translateY(-2px) scale(1.02)';
+                        this.style.boxShadow = '0 8px 24px rgba(var(--accent-rgb), 0.3)';
+                    });
+
+                    btn.addEventListener('mouseleave', function(e) {
+                        this.style.transform = 'translateY(0) scale(1)';
+                        this.style.boxShadow = '';
+                    });
+
+                    btn.addEventListener('mousedown', function(e) {
+                        this.style.transform = 'translateY(0) scale(0.98)';
+                    });
+
+                    btn.addEventListener('mouseup', function(e) {
+                        this.style.transform = 'translateY(-2px) scale(1.02)';
+                    });
+
+                    // Liquid fill effect on click
+                    btn.addEventListener('click', function(e) {
+                        const ripple = document.createElement('span');
+                        const rect = this.getBoundingClientRect();
+                        const size = Math.max(rect.width, rect.height);
+                        const x = e.clientX - rect.left - size / 2;
+                        const y = e.clientY - rect.top - size / 2;
+
+                        ripple.style.cssText = `
+                            position: absolute;
+                            width: ${size}px;
+                            height: ${size}px;
+                            top: ${y}px;
+                            left: ${x}px;
+                            background: radial-gradient(circle, rgba(var(--accent-rgb), 0.3) 0%, transparent 70%);
+                            border-radius: 50%;
+                            pointer-events: none;
+                            animation: liquidFill 0.6s ease-out;
+                            z-index: 0;
+                        `;
+
+                        this.appendChild(ripple);
+                        setTimeout(() => ripple.remove(), 600);
+                    });
+                });
+            };
+
+            // Enhanced input field interactions
+            const addInputEffects = () => {
+                // Scope to panel only
+                const inputs = this.panel.querySelectorAll('input[type="text"], input[type="number"], textarea, select');
+                inputs.forEach(input => {
+                    if (input.dataset.enhanced) return;
+                    input.dataset.enhanced = 'true';
+
+                    input.style.transition = 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+
+                    input.addEventListener('focus', function() {
+                        this.style.transform = 'scale(1.02)';
+                        this.style.animation = 'focusGlow 0.3s forwards';
+                        this.style.backdropFilter = 'blur(20px) saturate(180%)';
+                    });
+
+                    input.addEventListener('blur', function() {
+                        this.style.transform = 'scale(1)';
+                        this.style.animation = '';
+                        this.style.boxShadow = '';
+                        this.style.backdropFilter = '';
+                    });
+                });
+            };
+
+            // Enhanced tab interactions
+            const addTabEffects = () => {
+                // Scope to panel only
+                const tabs = this.panel.querySelectorAll('.al-tab');
+                tabs.forEach(tab => {
+                    if (tab.dataset.enhanced) return;
+                    tab.dataset.enhanced = 'true';
+
+                    tab.style.transition = 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+
+                    tab.addEventListener('mouseenter', function() {
+                        if (!this.classList.contains('active')) {
+                            this.style.transform = 'translateY(-2px) scale(1.03)';
+                            this.style.boxShadow = '0 4px 12px rgba(var(--accent-rgb), 0.2)';
+                        }
+                    });
+
+                    tab.addEventListener('mouseleave', function() {
+                        if (!this.classList.contains('active')) {
+                            this.style.transform = '';
+                            this.style.boxShadow = '';
+                        }
+                    });
+                });
+            };
+
+            // Apply effects initially
+            addButtonEffects();
+            addInputEffects();
+            addTabEffects();
+
+            // Re-apply when DOM changes (for dynamic content)
+            const observer = new MutationObserver(() => {
+                addButtonEffects();
+                addInputEffects();
+                addTabEffects();
+            });
+
+            observer.observe(this.panel, {
+                childList: true,
+                subtree: true
+            });
+        },
+
+        /**
+         * Add premium component enhancements
+         */
+        addPremiumEnhancements() {
+            // Enhanced toast notifications
+            const originalShowToast = this.showToast.bind(this);
+            this.showToast = (title, message, type = 'info') => {
+                originalShowToast(title, message, type);
+
+                // Find the toast and enhance it
+                setTimeout(() => {
+                    const toast = document.querySelector('.al-toast');
+                    if (toast && !toast.dataset.enhanced) {
+                        toast.dataset.enhanced = 'true';
+                        toast.style.animation = 'toastBounce 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
+
+                        // Add accent stripe with pulse
+                        const stripe = document.createElement('div');
+                        stripe.style.cssText = `
+                            position: absolute;
+                            top: 0;
+                            left: 0;
+                            width: 4px;
+                            height: 100%;
+                            background: linear-gradient(180deg,
+                                rgba(var(--accent-rgb), 1) 0%,
+                                rgba(var(--accent-rgb), 0.5) 100%);
+                            animation: neonPulse 2s ease-in-out infinite;
+                        `;
+                        toast.style.position = 'relative';
+                        toast.insertBefore(stripe, toast.firstChild);
+                    }
+                }, 50);
+            };
+
+            // Enhanced ticker bar
+            if (this.ticker) {
+                // Add wave animation to top border
+                const wave = document.createElement('div');
+                wave.style.cssText = `
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 200%;
+                    height: 2px;
+                    background: linear-gradient(90deg,
+                        transparent 0%,
+                        rgba(var(--accent-rgb), 0.5) 25%,
+                        rgba(var(--accent-rgb), 1) 50%,
+                        rgba(var(--accent-rgb), 0.5) 75%,
+                        transparent 100%);
+                    animation: waveMove 3s linear infinite;
+                    pointer-events: none;
+                `;
+                this.ticker.style.position = 'relative';
+                this.ticker.style.overflow = 'hidden';
+                this.ticker.insertBefore(wave, this.ticker.firstChild);
+            }
+
+            // Enhanced scrollbars
+            const style = document.createElement('style');
+            style.textContent = `
+                #al-panel ::-webkit-scrollbar {
+                    width: 8px;
+                    height: 8px;
+                }
+                #al-panel ::-webkit-scrollbar-track {
+                    background: rgba(var(--bg-secondary-rgb), 0.3);
+                    border-radius: 4px;
+                }
+                #al-panel ::-webkit-scrollbar-thumb {
+                    background: linear-gradient(180deg,
+                        rgba(var(--accent-rgb), 0.6) 0%,
+                        rgba(var(--accent-rgb), 0.3) 100%);
+                    border-radius: 4px;
+                    transition: all 0.3s ease;
+                }
+                #al-panel ::-webkit-scrollbar-thumb:hover {
+                    background: linear-gradient(180deg,
+                        rgba(var(--accent-rgb), 0.8) 0%,
+                        rgba(var(--accent-rgb), 0.5) 100%);
+                    box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.5);
+                }
+            `;
+            document.head.appendChild(style);
+        },
+
+        /**
+         * Apply theme-specific visual effects
+         */
+        applyThemeSpecificEffects() {
+            const theme = document.documentElement.getAttribute('data-al-theme') || 'dark';
+
+            // Remove any existing theme-specific effects
+            const existingEffects = document.querySelectorAll('.al-theme-effect');
+            existingEffects.forEach(el => el.remove());
+
+            // Clear inline styles from previous theme effects
+            if (this.panel) {
+                // Clear header styles
+                const header = this.panel.querySelector('.al-header');
+                if (header) {
+                    header.style.background = '';
+                    header.style.backgroundSize = '';
+                    header.style.animation = '';
+                }
+
+                // Clear button styles
+                const buttons = this.panel.querySelectorAll('.al-btn');
+                buttons.forEach(btn => {
+                    btn.style.background = '';
+                    btn.style.backgroundSize = '';
+                    btn.style.animation = '';
+                });
+
+                // Clear tab styles
+                const tabs = this.panel.querySelectorAll('.al-tab');
+                tabs.forEach(tab => {
+                    tab.style.animation = '';
+                });
+            }
+
+            switch(theme) {
+                case 'ocsd-sheriff':
+                    this.addTacticalEffects();
+                    break;
+                case 'high-contrast':
+                    this.addCyberEffects();
+                    break;
+                case 'light':
+                    this.addAuroraEffects();
+                    break;
+                case 'dark':
+                    this.addNeonEffects();
+                    break;
+            }
+        },
+
+        /**
+         * Add tactical effects for OCSD Sheriff theme
+         */
+        addTacticalEffects() {
+            if (!this.panel) return;
+
+            // Animated tactical gradient background
+            const headerGradient = this.panel.querySelector('.al-header');
+            if (headerGradient) {
+                headerGradient.style.background = `
+                    linear-gradient(135deg,
+                        #0b3b2e 0%,
+                        #0d4a3a 25%,
+                        #c9a227 50%,
+                        #0d4a3a 75%,
+                        #0b3b2e 100%)
+                `;
+                headerGradient.style.backgroundSize = '200% 200%';
+                headerGradient.style.animation = 'tacticalShift 20s ease infinite';
+            }
+
+            // Gold shimmer effect on hover for buttons
+            const buttons = this.panel.querySelectorAll('.al-btn');
+            buttons.forEach(btn => {
+                const originalBg = btn.style.background;
+                btn.addEventListener('mouseenter', function() {
+                    this.style.background = `
+                        linear-gradient(90deg,
+                            #c9a227 0%,
+                            #dcc48e 50%,
+                            #c9a227 100%)
+                    `;
+                    this.style.backgroundSize = '200% 100%';
+                    this.style.animation = 'goldShimmer 2s ease infinite';
+                });
+                btn.addEventListener('mouseleave', function() {
+                    this.style.background = originalBg;
+                    this.style.animation = '';
+                });
+            });
+
+            // Scanning line effect
+            const scanLine = document.createElement('div');
+            scanLine.className = 'al-theme-effect';
+            scanLine.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 2px;
+                background: linear-gradient(90deg,
+                    transparent 0%,
+                    rgba(201, 162, 39, 0.5) 50%,
+                    transparent 100%);
+                pointer-events: none;
+                animation: scanLine 4s linear infinite;
+                z-index: 10000;
+            `;
+            this.panel.appendChild(scanLine);
+        },
+
+        /**
+         * Add cyber effects for high contrast theme
+         */
+        addCyberEffects() {
+            if (!this.panel) return;
+
+            // Cyber grid overlay
+            const grid = document.createElement('div');
+            grid.className = 'al-theme-effect';
+            grid.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-image:
+                    linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px);
+                background-size: 20px 20px;
+                pointer-events: none;
+                animation: cyberGrid 2s linear infinite;
+                z-index: 1;
+            `;
+            this.panel.insertBefore(grid, this.panel.firstChild);
+
+            // Glitch text effect on headers
+            const headers = this.panel.querySelectorAll('h1, h2, h3');
+            headers.forEach(header => {
+                setInterval(() => {
+                    header.style.animation = 'glitchText 0.3s ease';
+                    setTimeout(() => {
+                        header.style.animation = '';
+                    }, 300);
+                }, 8000);
+            });
+
+            // Terminal cursor effect
+            const title = this.panel.querySelector('.al-header h2, .al-header h3');
+            if (title) {
+                const cursor = document.createElement('span');
+                cursor.className = 'al-theme-effect';
+                cursor.textContent = '▮';
+                cursor.style.cssText = `
+                    color: #00ffff;
+                    animation: terminalCursor 1s step-end infinite;
+                    margin-left: 2px;
+                `;
+                title.appendChild(cursor);
+            }
+        },
+
+        /**
+         * Add aurora effects for light theme
+         */
+        addAuroraEffects() {
+            if (!this.panel) return;
+
+            // Aurora borealis background effect
+            const aurora = document.createElement('div');
+            aurora.className = 'al-theme-effect';
+            aurora.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(135deg,
+                    rgba(59, 130, 246, 0.05) 0%,
+                    rgba(139, 92, 246, 0.05) 25%,
+                    rgba(236, 72, 153, 0.05) 50%,
+                    rgba(59, 130, 246, 0.05) 75%,
+                    rgba(139, 92, 246, 0.05) 100%);
+                background-size: 400% 400%;
+                animation: auroraFlow 15s ease infinite;
+                pointer-events: none;
+                z-index: 1;
+            `;
+            this.panel.insertBefore(aurora, this.panel.firstChild);
+
+            // Iridescent highlights on interactive elements
+            const interactives = this.panel.querySelectorAll('.al-btn, .al-tab');
+            interactives.forEach(el => {
+                el.addEventListener('mouseenter', function() {
+                    this.style.background = `
+                        linear-gradient(135deg,
+                            rgba(59, 130, 246, 0.1) 0%,
+                            rgba(139, 92, 246, 0.1) 50%,
+                            rgba(236, 72, 153, 0.1) 100%)
+                    `;
+                    this.style.backgroundSize = '200% 200%';
+                    this.style.animation = 'iridescent 2s ease infinite';
+                });
+                el.addEventListener('mouseleave', function() {
+                    this.style.background = '';
+                    this.style.backgroundSize = '';
+                    this.style.animation = '';
+                });
+            });
+        },
+
+        /**
+         * Add neon effects for dark theme
+         */
+        addNeonEffects() {
+            if (!this.panel) return;
+
+            // Neon border animation on panel
+            const neonBorder = document.createElement('div');
+            neonBorder.className = 'al-theme-effect';
+            neonBorder.style.cssText = `
+                position: absolute;
+                top: -2px;
+                left: -2px;
+                right: -2px;
+                bottom: -2px;
+                border: 2px solid rgba(56, 189, 248, 0.5);
+                border-radius: var(--radius-xl);
+                pointer-events: none;
+                animation: neonBorder 3s ease-in-out infinite;
+                z-index: 10000;
+            `;
+            this.panel.appendChild(neonBorder);
+
+            // Electric glow on active elements
+            const tabs = this.panel.querySelectorAll('.al-tab.active');
+            tabs.forEach(tab => {
+                tab.style.animation = 'neonPulse 2s ease-in-out infinite';
+            });
+
+            // Observe for new active tabs
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.attributeName === 'class') {
+                        const tab = mutation.target;
+                        if (tab.classList.contains('active')) {
+                            tab.style.animation = 'neonPulse 2s ease-in-out infinite';
+                        } else {
+                            tab.style.animation = '';
+                        }
+                    }
+                });
+            });
+
+            this.panel.querySelectorAll('.al-tab').forEach(tab => {
+                observer.observe(tab, { attributes: true });
+            });
         },
 
         /**
@@ -3670,23 +4477,23 @@
 
                 <h3>Status</h3>
                 <table style="width: 100%; border-collapse: collapse;">
-                    <tr style="border-bottom: 1px solid #444;">
+                    <tr style="border-bottom: 1px solid var(--border-light);">
                         <td style="padding: 8px;"><strong>Mode:</strong></td>
                         <td style="padding: 8px;">${AL.capture.getModeLabel()}</td>
                     </tr>
-                    <tr style="border-bottom: 1px solid #444;">
+                    <tr style="border-bottom: 1px solid var(--border-light);">
                         <td style="padding: 8px;"><strong>Role:</strong></td>
                         <td style="padding: 8px;">${leader ? 'Leader' : 'Follower'}</td>
                     </tr>
-                    <tr style="border-bottom: 1px solid #444;">
+                    <tr style="border-bottom: 1px solid var(--border-light);">
                         <td style="padding: 8px;"><strong>Context:</strong></td>
                         <td style="padding: 8px;">${AL.activeContext.isArmoryContext ? 'Armory' : 'Non-Armory'}</td>
                     </tr>
-                    <tr style="border-bottom: 1px solid #444;">
+                    <tr style="border-bottom: 1px solid var(--border-light);">
                         <td style="padding: 8px;"><strong>Active Prefix:</strong></td>
                         <td style="padding: 8px;">${AL.prefixes.activePrefix ? `${AL.prefixes.activePrefix.label} (${AL.prefixes.activeStickyCount})` : 'None'}</td>
                     </tr>
-                    <tr style="border-bottom: 1px solid #444;">
+                    <tr style="border-bottom: 1px solid var(--border-light);">
                         <td style="padding: 8px;"><strong>Last Scan:</strong></td>
                         <td style="padding: 8px;">${lastScan ? lastScan.scanText : 'None'}</td>
                     </tr>
@@ -3757,7 +4564,7 @@
             const fieldsList = document.getElementById('al_fields_list');
             AL.fields.fields.forEach(field => {
                 const row = document.createElement('div');
-                row.style.cssText = 'background: #2a2a2a; padding: 10px; margin-bottom: 10px; border-radius: 4px;';
+                row.style.cssText = 'padding: 10px; margin-bottom: 10px; border-radius: 4px;';
                 row.innerHTML = `
                     <div style="display: flex; align-items: center; margin-bottom: 8px;">
                         <input type="checkbox" ${field.enabled ? 'checked' : ''} data-key="${field.key}" class="al-field-enabled" style="margin-right: 8px;">
@@ -3833,11 +4640,11 @@
                 <p style="margin-bottom: 15px;">Configure pattern matching rules for barcode processing.</p>
 
                 <!-- Pattern Tester -->
-                <div style="background: #2a2a2a; padding: 12px; margin-bottom: 20px; border-radius: 4px;">
+                <div style="padding: 12px; margin-bottom: 20px; border-radius: 4px; border: 1px solid var(--border-light);">
                     <h4 style="margin: 0 0 10px 0;">Pattern Tester</h4>
                     <input type="text" id="al_rule_test_input" class="al-input" placeholder="Enter test barcode..." style="margin-bottom: 10px;">
                     <button class="al-btn al-btn-secondary" id="al_rule_test_btn">Test Pattern</button>
-                    <div id="al_rule_test_result" style="margin-top: 10px; padding: 10px; background: #1e1e1e; border-radius: 4px; min-height: 40px;"></div>
+                    <div id="al_rule_test_result" style="margin-top: 10px; padding: 10px; border-radius: 4px; min-height: 40px; border: 1px solid var(--border-light);"></div>
                 </div>
 
                 <!-- Action Buttons -->
@@ -3852,7 +4659,7 @@
             const rulesList = document.getElementById('al_rules_list');
             AL.rules.rules.forEach((rule, index) => {
                 const row = document.createElement('div');
-                row.style.cssText = 'background: #2a2a2a; padding: 12px; margin-bottom: 10px; border-radius: 4px;';
+                row.style.cssText = 'padding: 12px; margin-bottom: 10px; border-radius: 4px; border: 1px solid var(--border-light);';
 
                 // Format actions for display
                 const actionsDisplay = rule.actions.map(a => {
@@ -3869,13 +4676,13 @@
                         <strong style="font-size: 14px;">${rule.name}</strong>
                         <span style="color: #999; margin-left: 8px; font-size: 11px;">(Priority: ${index + 1})</span>
                     </div>
-                    <div style="margin-bottom: 8px; padding: 8px; background: #1e1e1e; border-radius: 3px; font-family: monospace; font-size: 12px;">
+                    <div style="margin-bottom: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: 3px; font-family: monospace; font-size: 12px;">
                         <div style="margin-bottom: 4px;"><strong>Pattern:</strong> ${AL.utils.escapeHtml(rule.pattern)}</div>
                         <div style="margin-bottom: 4px;"><strong>Type:</strong> ${rule.patternType}</div>
                         ${rule.useDirective ? `<div style="margin-bottom: 4px;"><strong>Directive:</strong> ${rule.directiveChars.join(', ')} → ${rule.directiveChars.map(c => AL.rules.directiveMap[c] || c).join(', ')}</div>` : ''}
                         ${rule.speechLabel ? `<div style="margin-bottom: 4px;"><strong>Speech:</strong> ${rule.speechLabel}</div>` : ''}
                     </div>
-                    <div style="margin-bottom: 8px; padding: 8px; background: #1e1e1e; border-radius: 3px; font-size: 12px;">
+                    <div style="margin-bottom: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: 3px; font-size: 12px;">
                         <strong>Actions:</strong> ${actionsDisplay || 'None'}
                     </div>
                     <div>
@@ -4026,7 +4833,7 @@
 
                 <!-- Active Prefix Display -->
                 ${activePrefix ? `
-                    <div style="background: #2a2a2a; padding: 12px; margin-bottom: 20px; border-radius: 4px; border-left: 4px solid #4CAF50;">
+                    <div style="padding: 12px; margin-bottom: 20px; border-radius: 4px; border-left: 4px solid #4CAF50; border: 1px solid var(--border-light);">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
                                 <strong style="color: #4CAF50;">Active Prefix:</strong> ${activePrefix.label}
@@ -4036,7 +4843,7 @@
                         </div>
                     </div>
                 ` : `
-                    <div style="background: #2a2a2a; padding: 12px; margin-bottom: 20px; border-radius: 4px;">
+                    <div style="padding: 12px; margin-bottom: 20px; border-radius: 4px; border: 1px solid var(--border-light);">
                         <div style="color: #999; font-size: 12px;">No active prefix. Press Alt+1-9 to activate.</div>
                     </div>
                 `}
@@ -4065,7 +4872,7 @@
             } else {
                 AL.prefixes.prefixes.forEach(prefix => {
                     const row = document.createElement('div');
-                    row.style.cssText = 'background: #2a2a2a; padding: 12px; margin-bottom: 10px; border-radius: 4px;';
+                    row.style.cssText = 'padding: 12px; margin-bottom: 10px; border-radius: 4px; border: 1px solid var(--border-light);';
 
                     const isActive = activePrefix && activePrefix.id === prefix.id;
 
@@ -4077,7 +4884,7 @@
                                     ${prefix.hotkey ? `<span style="background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 8px; font-family: monospace;">Alt+${prefix.hotkey}</span>` : ''}
                                     ${isActive ? `<span style="background: #f59e0b; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 8px;">ACTIVE</span>` : ''}
                                 </div>
-                                <div style="font-family: monospace; font-size: 12px; background: #1e1e1e; padding: 6px 8px; border-radius: 3px; margin-bottom: 4px;">
+                                <div style="font-family: monospace; font-size: 12px; border: 1px solid var(--border-light); padding: 6px 8px; border-radius: 3px; margin-bottom: 4px;">
                                     "${AL.utils.escapeHtml(prefix.value)}"
                                 </div>
                                 <div style="font-size: 11px; color: #999;">
@@ -4158,8 +4965,8 @@
                 <p style="margin-bottom: 20px;">Configure system preferences and behavior.</p>
 
                 <!-- Theme Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Theme</h4>
+                <div style="padding: 15px; margin-bottom: 15px; border-radius: 4px; border: 1px solid var(--border-light);">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Theme</h4>
 
                     <div class="al-form-group">
                         <label>Color Theme</label>
@@ -4174,8 +4981,8 @@
                 </div>
 
                 <!-- Layout Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Layout</h4>
+                <div style="padding: 15px; margin-bottom: 15px; border-radius: 4px; border: 1px solid var(--border-light);">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Layout</h4>
 
                     <div class="al-form-group">
                         <label>Dock Mode</label>
@@ -4211,8 +5018,8 @@
                 </div>
 
                 <!-- Capture Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Scanner Capture</h4>
+                <div style="padding: 15px; margin-bottom: 15px; border-radius: 4px; border: 1px solid var(--border-light);">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Scanner Capture</h4>
 
                     <div class="al-form-group">
                         <label>Scan Throttle (ms)</label>
@@ -4234,8 +5041,8 @@
                 </div>
 
                 <!-- Toast Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Toast Notifications</h4>
+                <div style="padding: 15px; margin-bottom: 15px; border-radius: 4px; border: 1px solid var(--border-light);">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Toast Notifications</h4>
 
                     <div class="al-form-group">
                         <label>Toast Position</label>
@@ -4286,8 +5093,8 @@
                 </div>
 
                 <!-- Speech Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Speech Synthesis</h4>
+                <div style="padding: 15px; margin-bottom: 15px; border-radius: 4px; border: 1px solid var(--border-light);">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Speech Synthesis</h4>
 
                     <div class="al-form-group">
                         <div class="al-checkbox-group">
@@ -4314,8 +5121,8 @@
                 </div>
 
                 <!-- Ticker Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Ticker</h4>
+                <div style="padding: 15px; margin-bottom: 15px; border-radius: 4px; border: 1px solid var(--border-light);">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Ticker</h4>
 
                     <div class="al-form-group">
                         <div class="al-checkbox-group">
@@ -4338,8 +5145,8 @@
                 </div>
 
                 <!-- Debug Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Debug</h4>
+                <div style="padding: 15px; margin-bottom: 15px; border-radius: 4px; border: 1px solid var(--border-light);">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Debug</h4>
 
                     <div class="al-form-group">
                         <div class="al-checkbox-group">
@@ -4459,8 +5266,8 @@
                 <p style="margin-bottom: 15px; color: #999;">Axon Evidence.com integration</p>
 
                 <!-- Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Settings</h4>
+                <div style="border: 1px solid var(--border-light); padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Settings</h4>
 
                     <div class="al-form-group">
                         <div class="al-checkbox-group">
@@ -4488,8 +5295,8 @@
                 </div>
 
                 <!-- Launch Controls -->
-                <div style="background: #2a2a2a; padding: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Quick Launch</h4>
+                <div style="border: 1px solid var(--border-light); padding: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Quick Launch</h4>
 
                     <p style="font-size: 12px; color: #999; margin-bottom: 15px;">
                         Automatically reads User field from active ServiceNow page to look up camera assignments.
@@ -4513,7 +5320,7 @@
                             overflow: hidden;
                             display: none;
                         ">
-                            <div style="background: #2a2a2a; padding: 8px; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 10px;">
+                            <div style="border: 1px solid var(--border-light); padding: 8px; border-bottom: 1px solid var(--border-light); display: flex; align-items: center; gap: 10px;">
                                 <span style="flex: 1; font-size: 11px; color: #999;" id="al-bwc-iframe-url">No page loaded</span>
                                 <button class="al-btn al-btn-secondary" id="al-bwc-iframe-close" style="padding: 4px 8px; font-size: 11px;">Close</button>
                             </div>
@@ -4614,8 +5421,8 @@
                 <p style="margin-bottom: 15px; color: #999;">TASER device management integration</p>
 
                 <!-- Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Settings</h4>
+                <div style="border: 1px solid var(--border-light); padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Settings</h4>
 
                     <div class="al-form-group">
                         <div class="al-checkbox-group">
@@ -4643,8 +5450,8 @@
                 </div>
 
                 <!-- Launch Controls -->
-                <div style="background: #2a2a2a; padding: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Quick Launch</h4>
+                <div style="border: 1px solid var(--border-light); padding: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Quick Launch</h4>
 
                     <p style="font-size: 12px; color: #999; margin-bottom: 15px;">
                         Automatically reads Taser Asset field from active ServiceNow page to look up device info.
@@ -4668,7 +5475,7 @@
                             overflow: hidden;
                             display: none;
                         ">
-                            <div style="background: #2a2a2a; padding: 8px; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 10px;">
+                            <div style="border: 1px solid var(--border-light); padding: 8px; border-bottom: 1px solid var(--border-light); display: flex; align-items: center; gap: 10px;">
                                 <span style="flex: 1; font-size: 11px; color: #999;" id="al-x10-iframe-url">No page loaded</span>
                                 <button class="al-btn al-btn-secondary" id="al-x10-iframe-close" style="padding: 4px 8px; font-size: 11px;">Close</button>
                             </div>
@@ -4797,8 +5604,8 @@
                 </div>
 
                 <!-- Favorites List -->
-                <div style="background: #2a2a2a; padding: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">
+                <div style="border: 1px solid var(--border-light); padding: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">
                         Saved Favorites (${favorites.length})
                     </h4>
 
@@ -5090,8 +5897,8 @@
                 </div>
 
                 <!-- Macro List -->
-                <div style="background: #2a2a2a; padding: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">
+                <div style="border: 1px solid var(--border-light); padding: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">
                         Macros (${macros.length})
                     </h4>
 
@@ -5432,8 +6239,8 @@
                 <p style="margin-bottom: 15px; color: #999;">Collect multiple scans into a session or queue barcodes for processing</p>
 
                 <!-- Batch Queue Input -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Queue Multiple Barcodes</h4>
+                <div style="border: 1px solid var(--border-light); padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Queue Multiple Barcodes</h4>
                     <div style="margin-bottom: 10px;">
                         <label style="display: block; margin-bottom: 5px; font-size: 12px;">Paste barcodes (one per line):</label>
                         <textarea id="al-batch-queue-input" class="al-input" rows="6" placeholder="Scan1&#10;Scan2&#10;Scan3&#10;...&#10;&#10;Paste or type one barcode per line, then click Queue Batch to process them sequentially." style="font-family: monospace; resize: vertical; min-height: 120px;"></textarea>
@@ -5446,8 +6253,8 @@
                 </div>
 
                 <!-- Session Controls -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Session Control</h4>
+                <div style="border: 1px solid var(--border-light); padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Session Control</h4>
 
                     <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
                         <button class="al-btn ${isActive ? 'al-btn-danger' : 'al-btn-primary'}" id="al-batch-toggle-btn">
@@ -5483,8 +6290,8 @@
                 </div>
 
                 <!-- Scan List -->
-                <div style="background: #2a2a2a; padding: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">
+                <div style="border: 1px solid var(--border-light); padding: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">
                         Scans in Batch (${batch.scans.length})
                     </h4>
 
@@ -5506,7 +6313,7 @@
                             </div>
                         ` : `
                             <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                                <thead style="position: sticky; top: 0; background: #2a2a2a; border-bottom: 2px solid #444;">
+                                <thead style="position: sticky; top: 0; border: 1px solid var(--border-light); border-bottom: 2px solid var(--border-medium);">
                                     <tr>
                                         <th style="padding: 8px; text-align: left; font-weight: 600;">#</th>
                                         <th style="padding: 8px; text-align: left; font-weight: 600;">Time</th>
@@ -5722,7 +6529,7 @@
                         </div>
                     ` : `
                         <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                            <thead style="position: sticky; top: 0; background: #2a2a2a; border-bottom: 2px solid #444;">
+                            <thead style="position: sticky; top: 0; border: 1px solid var(--border-light); border-bottom: 2px solid var(--border-medium);">
                                 <tr>
                                     <th style="padding: 10px; text-align: left; font-weight: 600;">Time</th>
                                     <th style="padding: 10px; text-align: left; font-weight: 600;">Scan</th>
@@ -5750,7 +6557,7 @@
                                                 <div>${time}</div>
                                             </td>
                                             <td style="padding: 10px;">
-                                                <code style="background: #2a2a2a; padding: 2px 6px; border-radius: 3px; font-size: 11px;">${entry.scan || 'N/A'}</code>
+                                                <code style="border: 1px solid var(--border-light); padding: 2px 6px; border-radius: 3px; font-size: 11px;">${entry.scan || 'N/A'}</code>
                                             </td>
                                             <td style="padding: 10px;">
                                                 ${entry.type ? `<span style="color: ${entry.type === 'Deployment' ? '#00ff88' : '#ffaa00'};">${entry.type}</span>` : '<span style="color: #666;">—</span>'}
@@ -5824,8 +6631,8 @@
                 <p style="margin-bottom: 15px; color: #999;">System logs and diagnostics</p>
 
                 <!-- Stats Panel -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">System Statistics</h4>
+                <div style="border: 1px solid var(--border-light); padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">System Statistics</h4>
                     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; font-size: 12px;">
                         <div><strong>Mode:</strong> ${stats.captureMode}</div>
                         <div><strong>Leader:</strong> ${stats.isLeader ? 'Yes' : 'No'}</div>
@@ -6324,7 +7131,7 @@
                 }
 
                 return `
-                    <div class="al-action-item" data-index="${index}" style="background: #1e1e1e; padding: 8px; margin-bottom: 6px; border-radius: 3px;">
+                    <div class="al-action-item" data-index="${index}" style="border: 1px solid var(--border-light); padding: 8px; margin-bottom: 6px; border-radius: 3px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
                             <span style="font-size: 12px; flex: 1;">${display}</span>
                             <div style="display: flex; gap: 4px;">
