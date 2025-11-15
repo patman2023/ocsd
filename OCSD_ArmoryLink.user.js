@@ -5458,15 +5458,48 @@
                         <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
                             <span style="font-size: 12px; flex: 1;">${display}</span>
                             <div style="display: flex; gap: 4px;">
-                                <button class="al-btn al-btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="AL.ui.moveActionUp(${index})" ${index === 0 ? 'disabled' : ''}>↑</button>
-                                <button class="al-btn al-btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="AL.ui.moveActionDown(${index})" ${index === actions.length - 1 ? 'disabled' : ''}>↓</button>
-                                <button class="al-btn al-btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="AL.ui.editAction(${index})">Edit</button>
-                                <button class="al-btn al-btn-danger" style="font-size: 11px; padding: 4px 8px;" onclick="AL.ui.removeAction(${index})">Remove</button>
+                                <button class="al-action-move-up" data-index="${index}" style="font-size: 11px; padding: 4px 8px;" ${index === 0 ? 'disabled' : ''}>↑</button>
+                                <button class="al-action-move-down" data-index="${index}" style="font-size: 11px; padding: 4px 8px;" ${index === actions.length - 1 ? 'disabled' : ''}>↓</button>
+                                <button class="al-action-edit" data-index="${index}" style="font-size: 11px; padding: 4px 8px;">Edit</button>
+                                <button class="al-action-remove" data-index="${index}" style="font-size: 11px; padding: 4px 8px;">Remove</button>
                             </div>
                         </div>
                     </div>
                 `;
             }).join('');
+
+            // Attach event listeners to action buttons
+            actionsList.querySelectorAll('.al-action-move-up').forEach(btn => {
+                btn.className = 'al-btn al-btn-secondary al-action-move-up';
+                btn.onclick = () => {
+                    const index = parseInt(btn.dataset.index);
+                    this.moveActionUp(index);
+                };
+            });
+
+            actionsList.querySelectorAll('.al-action-move-down').forEach(btn => {
+                btn.className = 'al-btn al-btn-secondary al-action-move-down';
+                btn.onclick = () => {
+                    const index = parseInt(btn.dataset.index);
+                    this.moveActionDown(index);
+                };
+            });
+
+            actionsList.querySelectorAll('.al-action-edit').forEach(btn => {
+                btn.className = 'al-btn al-btn-secondary al-action-edit';
+                btn.onclick = () => {
+                    const index = parseInt(btn.dataset.index);
+                    this.editAction(index);
+                };
+            });
+
+            actionsList.querySelectorAll('.al-action-remove').forEach(btn => {
+                btn.className = 'al-btn al-btn-danger al-action-remove';
+                btn.onclick = () => {
+                    const index = parseInt(btn.dataset.index);
+                    this.removeAction(index);
+                };
+            });
         },
 
         /**
