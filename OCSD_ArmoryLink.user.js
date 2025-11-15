@@ -1088,6 +1088,82 @@
         },
 
         /**
+         * Set Vehicle field from asset number with full async workflow
+         * Handles ServiceNow reference/typeahead field properly:
+         * 1. Type asset number
+         * 2. Wait for dropdown
+         * 3. Click matching option
+         * 4. Wait for selection to complete
+         * 5. Commit & verify
+         * @param {string} asset - The vehicle asset number to set
+         * @returns {Promise<boolean>} True if successful
+         */
+        async setAndCommitVehicleFromAsset(asset) {
+            console.log('[elements] Setting Vehicle field from asset:', asset);
+
+            // 1) Get the Vehicle field
+            const field = await this.getField('vehicle');
+            if (!field) {
+                console.error('[elements] Vehicle field not found');
+                AL.ui.showToast('Error', 'Vehicle field not found', 'error');
+                return false;
+            }
+
+            // 2) Type the asset number into the reference input and fire events
+            field.value = asset;
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+            field.dispatchEvent(new Event('change', { bubbles: true }));
+
+            console.log('[elements] Typed asset into Vehicle field, waiting for dropdown...');
+
+            // 3) Wait for the suggestion list to appear and populate
+            const option = await this.waitForReferenceOption(field, (opt) => {
+                const txt = opt.textContent || '';
+                // Match either asset number or vehicle description
+                return txt.includes(asset);
+            }, { timeout: 5000 });
+
+            if (!option) {
+                console.warn('[elements] No reference suggestion found for vehicle asset:', asset);
+                AL.ui.showToast('Warning', `No vehicle found for ${asset}`, 'warning');
+                return false;
+            }
+
+            console.log('[elements] Found matching vehicle option, clicking...');
+
+            // 4) Click the option to let ServiceNow do its reference selection
+            option.click();
+
+            // 5) Wait until the Vehicle field is actually populated with the selected vehicle
+            const selectionComplete = await this.waitForReferenceSelection(field, { pid: asset });
+
+            if (!selectionComplete) {
+                console.warn('[elements] Vehicle selection did not complete in time');
+                AL.ui.showToast('Warning', 'Vehicle selection may not be complete', 'warning');
+                return false;
+            }
+
+            console.log('[elements] Vehicle field selection complete');
+
+            // 6) Commit the field (dispatch final change event)
+            field.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Small delay to let ServiceNow process
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // 7) Verify the field has a value
+            const finalValue = field.value?.trim();
+            if (!finalValue || finalValue.length === 0) {
+                console.error('[elements] Vehicle field is empty after selection');
+                return false;
+            }
+
+            console.log('[elements] Vehicle field successfully set to:', finalValue);
+            AL.ui.showToast('Success', `Vehicle set: ${finalValue}`, 'success');
+            return true;
+        },
+
+        /**
          * Generic set and commit for non-reference fields
          * @param {string} key - Field key
          * @param {string} value - Value to set
@@ -1273,10 +1349,13 @@
 
             switch (action.type) {
                 case 'setField':
-                    // Special handling for User field (reference/typeahead)
+                    // Special handling for reference/typeahead fields
                     if (action.field === 'user') {
                         console.log('[rules] Using async helper for User field');
                         await AL.elements.setAndCommitUserFromPid(action.value);
+                    } else if (action.field === 'vehicle') {
+                        console.log('[rules] Using async helper for Vehicle field');
+                        await AL.elements.setAndCommitVehicleFromAsset(action.value);
                     } else {
                         // Use async helper for other fields
                         await AL.elements.setAndCommit(action.field, action.value);
@@ -7542,10 +7621,15 @@
             }
 
             try {
-                // User field should NOT be set through this method anymore
-                // Use AL.elements.setAndCommitUserFromPid() instead for proper async workflow
+                // Reference fields should NOT be set through this method anymore
+                // Use AL.elements async helpers instead for proper workflow
                 if (key === 'user') {
                     console.warn('[fields] User field should be set using AL.elements.setAndCommitUserFromPid() for proper async workflow');
+                    return false;
+                }
+
+                if (key === 'vehicle') {
+                    console.warn('[fields] Vehicle field should be set using AL.elements.setAndCommitVehicleFromAsset() for proper async workflow');
                     return false;
                 }
 
