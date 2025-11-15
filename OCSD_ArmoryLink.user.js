@@ -3497,7 +3497,6 @@
                 animation: cyberGrid 2s linear infinite;
                 z-index: 1;
             `;
-            this.panel.style.position = 'relative';
             this.panel.insertBefore(grid, this.panel.firstChild);
 
             // Glitch text effect on headers
@@ -3552,7 +3551,6 @@
                 pointer-events: none;
                 z-index: 1;
             `;
-            this.panel.style.position = 'relative';
             this.panel.insertBefore(aurora, this.panel.firstChild);
 
             // Iridescent highlights on interactive elements
@@ -3595,7 +3593,6 @@
                 animation: neonBorder 3s ease-in-out infinite;
                 z-index: 10000;
             `;
-            this.panel.style.position = 'relative';
             this.panel.appendChild(neonBorder);
 
             // Electric glow on active elements
