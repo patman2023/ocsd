@@ -1723,8 +1723,15 @@
                     --al-header-bg: #ffffff;
                     --al-input-bg: #ffffff;
                     --al-input-border: #d1d5db;
+                    --al-input-text: #111827;
                     --al-button-bg: #3b82f6;
                     --al-button-text: #ffffff;
+                    --al-button-hover-bg: #2563eb;
+                    --al-section-bg: #f3f4f6;
+                    --al-section-border: #e5e7eb;
+                    --al-code-bg: #f3f4f6;
+                    --al-label-text: #374151;
+                    --al-link-color: #3b82f6;
                 }
 
                 /* Dark Theme */
@@ -1750,8 +1757,15 @@
                     --al-header-bg: #111827;
                     --al-input-bg: #374151;
                     --al-input-border: #4b5563;
+                    --al-input-text: #f3f4f6;
                     --al-button-bg: #3b82f6;
                     --al-button-text: #ffffff;
+                    --al-button-hover-bg: #2563eb;
+                    --al-section-bg: #2a2a2a;
+                    --al-section-border: #374151;
+                    --al-code-bg: #1e1e1e;
+                    --al-label-text: #d1d5db;
+                    --al-link-color: #60a5fa;
                 }
 
                 /* High Contrast Theme */
@@ -1777,8 +1791,15 @@
                     --al-header-bg: #000000;
                     --al-input-bg: #000000;
                     --al-input-border: #ffffff;
+                    --al-input-text: #ffffff;
                     --al-button-bg: #ffffff;
                     --al-button-text: #000000;
+                    --al-button-hover-bg: #cccccc;
+                    --al-section-bg: #000000;
+                    --al-section-border: #ffffff;
+                    --al-code-bg: #000000;
+                    --al-label-text: #ffffff;
+                    --al-link-color: #00ffff;
                 }
 
                 /* OCSD Sheriff Theme */
@@ -1804,8 +1825,15 @@
                     --al-header-bg: #0b3b2e;
                     --al-input-bg: #1c1c1c;
                     --al-input-border: #c9a227;
+                    --al-input-text: #dcc48e;
                     --al-button-bg: #c9a227;
                     --al-button-text: #0a0a0a;
+                    --al-button-hover-bg: #b38f1f;
+                    --al-section-bg: #0b3b2e;
+                    --al-section-border: #c9a227;
+                    --al-code-bg: #1c1c1c;
+                    --al-label-text: #dcc48e;
+                    --al-link-color: #c9a227;
                 }
 
                 /* Apply theme variables to components */
@@ -1890,6 +1918,87 @@
 
                 .al-toast-info {
                     border-color: #3b82f6 !important;
+                }
+
+                /* Apply theme variables to all components */
+
+                /* Buttons */
+                .al-btn {
+                    background: var(--al-button-bg) !important;
+                    color: var(--al-button-text) !important;
+                }
+
+                .al-btn:hover {
+                    background: var(--al-button-hover-bg) !important;
+                }
+
+                .al-btn-secondary {
+                    background: var(--al-section-bg) !important;
+                    color: var(--al-text-primary) !important;
+                    border: 1px solid var(--al-section-border);
+                }
+
+                /* Inputs and Textareas */
+                .al-input, .al-textarea {
+                    background: var(--al-input-bg) !important;
+                    color: var(--al-input-text) !important;
+                    border-color: var(--al-input-border) !important;
+                }
+
+                input[type="text"],
+                input[type="number"],
+                input[type="email"],
+                select,
+                textarea {
+                    background: var(--al-input-bg) !important;
+                    color: var(--al-input-text) !important;
+                    border-color: var(--al-input-border) !important;
+                }
+
+                /* Labels */
+                label,
+                .al-form-group label {
+                    color: var(--al-label-text) !important;
+                }
+
+                /* Form Groups / Sections */
+                .al-form-group,
+                div[style*="background: #2a2a2a"],
+                div[style*="background:#2a2a2a"] {
+                    background: var(--al-section-bg) !important;
+                    border-color: var(--al-section-border) !important;
+                }
+
+                /* Code blocks */
+                div[style*="background: #1e1e1e"],
+                div[style*="background:#1e1e1e"],
+                div[style*="background: #1a1a1a"],
+                div[style*="background:#1a1a1a"],
+                code,
+                pre {
+                    background: var(--al-code-bg) !important;
+                    color: var(--al-text-primary) !important;
+                }
+
+                /* Links */
+                a {
+                    color: var(--al-link-color) !important;
+                }
+
+                /* Small text / descriptions */
+                small {
+                    color: var(--al-text-secondary) !important;
+                }
+
+                /* Settings sections specifically */
+                #al-content > div[style*="background: #2a2a2a"] {
+                    background: var(--al-section-bg) !important;
+                    color: var(--al-text-primary) !important;
+                }
+
+                #al-content > div[style*="background: #2a2a2a"] h4 {
+                    color: var(--al-text-primary) !important;
+                    border-color: var(--al-section-border) !important;
                 }
             `);
         },
