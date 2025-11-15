@@ -1489,6 +1489,7 @@
             this.createTicker();
             this.createBubble();
             this.createStripLauncher();
+            this.initVisualEnhancements();  // Initialize 20X visual enhancements
             this.addDebugLog('system', '[ui] Initialized');
         },
 
@@ -1666,6 +1667,12 @@
                    LIGHT THEME - MODERN PALETTE
                    ============================================ */
                 [data-al-theme="light"] {
+                    /* RGB color values for advanced effects */
+                    --accent-rgb: 59, 130, 246;
+                    --glass-bg-rgb: 255, 255, 255;
+                    --bg-secondary-rgb: 241, 245, 249;
+                    --bg-elevated-rgb: 255, 255, 255;
+
                     /* Backgrounds with subtle gradients */
                     --bg-primary: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
                     --bg-secondary: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
@@ -1702,6 +1709,12 @@
                    DARK THEME - MODERN PALETTE
                    ============================================ */
                 [data-al-theme="dark"] {
+                    /* RGB color values for advanced effects */
+                    --accent-rgb: 56, 189, 248;
+                    --glass-bg-rgb: 15, 23, 42;
+                    --bg-secondary-rgb: 30, 41, 59;
+                    --bg-elevated-rgb: 30, 41, 59;
+
                     /* Rich dark backgrounds */
                     --bg-primary: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
                     --bg-secondary: linear-gradient(135deg, #1e293b 0%, #334155 100%);
@@ -1738,6 +1751,12 @@
                    HIGH CONTRAST - ACCESSIBILITY FOCUSED
                    ============================================ */
                 [data-al-theme="high-contrast"] {
+                    /* RGB color values for advanced effects */
+                    --accent-rgb: 0, 255, 255;
+                    --glass-bg-rgb: 0, 0, 0;
+                    --bg-secondary-rgb: 255, 255, 255;
+                    --bg-elevated-rgb: 0, 0, 0;
+
                     --bg-primary: #000000;
                     --bg-secondary: #ffffff;
                     --bg-elevated: #000000;
@@ -1769,6 +1788,12 @@
                    OCSD SHERIFF - OFFICIAL THEME
                    ============================================ */
                 [data-al-theme="ocsd-sheriff"] {
+                    /* RGB color values for advanced effects */
+                    --accent-rgb: 201, 162, 39;
+                    --glass-bg-rgb: 11, 59, 46;
+                    --bg-secondary-rgb: 11, 59, 46;
+                    --bg-elevated-rgb: 11, 59, 46;
+
                     /* Tactical gradients */
                     --bg-primary: linear-gradient(135deg, #0a0a0a 0%, #1c1c1c 100%);
                     --bg-secondary: linear-gradient(135deg, #0b3b2e 0%, #0d4a3a 100%);
@@ -2754,6 +2779,265 @@
                 }
 
                 /* ============================================
+                   20X VISUAL ENHANCEMENTS - ADVANCED ANIMATIONS
+                   ============================================ */
+
+                /* Tactical Effects for OCSD Sheriff Theme */
+                @keyframes tacticalShift {
+                    0%, 100% {
+                        background-position: 0% 50%;
+                    }
+                    50% {
+                        background-position: 100% 50%;
+                    }
+                }
+
+                @keyframes goldShimmer {
+                    0%, 100% {
+                        background-position: -200% center;
+                    }
+                    50% {
+                        background-position: 200% center;
+                    }
+                }
+
+                @keyframes badgePulse {
+                    0%, 100% {
+                        box-shadow: 0 0 20px rgba(201, 162, 39, 0.3),
+                                    inset 0 0 20px rgba(201, 162, 39, 0.1);
+                    }
+                    50% {
+                        box-shadow: 0 0 40px rgba(201, 162, 39, 0.5),
+                                    inset 0 0 30px rgba(201, 162, 39, 0.2);
+                    }
+                }
+
+                @keyframes scanLine {
+                    0% {
+                        top: 0%;
+                        opacity: 0.8;
+                    }
+                    50% {
+                        opacity: 0.3;
+                    }
+                    100% {
+                        top: 100%;
+                        opacity: 0.8;
+                    }
+                }
+
+                /* Cyber Effects for High Contrast Theme */
+                @keyframes cyberGrid {
+                    0% {
+                        transform: translateY(0);
+                    }
+                    100% {
+                        transform: translateY(20px);
+                    }
+                }
+
+                @keyframes glitchText {
+                    0%, 90%, 100% {
+                        transform: translate(0);
+                        opacity: 1;
+                    }
+                    92% {
+                        transform: translate(-2px, 2px);
+                        opacity: 0.8;
+                    }
+                    94% {
+                        transform: translate(2px, -2px);
+                        opacity: 0.9;
+                    }
+                    96% {
+                        transform: translate(-1px, 1px);
+                        opacity: 0.85;
+                    }
+                }
+
+                @keyframes terminalCursor {
+                    0%, 49% {
+                        opacity: 1;
+                    }
+                    50%, 100% {
+                        opacity: 0;
+                    }
+                }
+
+                /* Aurora Effects for Light Theme */
+                @keyframes auroraFlow {
+                    0%, 100% {
+                        background-position: 0% 50%;
+                        filter: hue-rotate(0deg);
+                    }
+                    50% {
+                        background-position: 100% 50%;
+                        filter: hue-rotate(20deg);
+                    }
+                }
+
+                @keyframes iridescent {
+                    0%, 100% {
+                        background-position: 0% 0%;
+                    }
+                    50% {
+                        background-position: 100% 100%;
+                    }
+                }
+
+                /* Neon Effects for Dark Theme */
+                @keyframes neonBorder {
+                    0%, 100% {
+                        border-color: rgba(56, 189, 248, 0.5);
+                        box-shadow: 0 0 20px rgba(56, 189, 248, 0.3),
+                                    inset 0 0 20px rgba(56, 189, 248, 0.1);
+                    }
+                    50% {
+                        border-color: rgba(56, 189, 248, 0.8);
+                        box-shadow: 0 0 40px rgba(56, 189, 248, 0.5),
+                                    inset 0 0 30px rgba(56, 189, 248, 0.2);
+                    }
+                }
+
+                @keyframes neonPulse {
+                    0%, 100% {
+                        box-shadow: 0 0 10px rgba(56, 189, 248, 0.2),
+                                    0 0 20px rgba(56, 189, 248, 0.1),
+                                    0 0 30px rgba(56, 189, 248, 0.05);
+                    }
+                    50% {
+                        box-shadow: 0 0 20px rgba(56, 189, 248, 0.4),
+                                    0 0 40px rgba(56, 189, 248, 0.2),
+                                    0 0 60px rgba(56, 189, 248, 0.1);
+                    }
+                }
+
+                @keyframes electricGlow {
+                    0%, 100% {
+                        filter: brightness(1) saturate(1);
+                    }
+                    50% {
+                        filter: brightness(1.2) saturate(1.5);
+                    }
+                }
+
+                /* Universal Micro-Interactions */
+                @keyframes liquidFill {
+                    0% {
+                        transform: scale(0) translateY(0);
+                        opacity: 0.3;
+                    }
+                    50% {
+                        opacity: 0.2;
+                    }
+                    100% {
+                        transform: scale(2.5) translateY(0);
+                        opacity: 0;
+                    }
+                }
+
+                @keyframes magneticAttract {
+                    0%, 100% {
+                        transform: translate(0, 0);
+                    }
+                    25% {
+                        transform: translate(-2px, -2px);
+                    }
+                    75% {
+                        transform: translate(2px, 2px);
+                    }
+                }
+
+                @keyframes springBounce {
+                    0% {
+                        transform: scale(1);
+                    }
+                    25% {
+                        transform: scale(0.95);
+                    }
+                    50% {
+                        transform: scale(1.05);
+                    }
+                    75% {
+                        transform: scale(0.98);
+                    }
+                    100% {
+                        transform: scale(1);
+                    }
+                }
+
+                @keyframes focusGlow {
+                    0% {
+                        box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0);
+                    }
+                    100% {
+                        box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.2),
+                                    0 0 20px rgba(var(--accent-rgb), 0.3),
+                                    0 0 40px rgba(var(--accent-rgb), 0.1);
+                    }
+                }
+
+                @keyframes toastBounce {
+                    0% {
+                        transform: translateX(400px) scale(0.7);
+                        opacity: 0;
+                    }
+                    50% {
+                        transform: translateX(-20px) scale(1.05);
+                    }
+                    70% {
+                        transform: translateX(10px) scale(0.95);
+                    }
+                    100% {
+                        transform: translateX(0) scale(1);
+                        opacity: 1;
+                    }
+                }
+
+                @keyframes checkmarkDraw {
+                    0% {
+                        stroke-dashoffset: 100;
+                        transform: rotate(0deg) scale(0.8);
+                    }
+                    50% {
+                        transform: rotate(180deg) scale(1.1);
+                    }
+                    100% {
+                        stroke-dashoffset: 0;
+                        transform: rotate(360deg) scale(1);
+                    }
+                }
+
+                @keyframes waveMove {
+                    0% {
+                        transform: translateX(-100%);
+                    }
+                    100% {
+                        transform: translateX(100%);
+                    }
+                }
+
+                @keyframes radarPing {
+                    0% {
+                        transform: scale(1);
+                        opacity: 1;
+                    }
+                    100% {
+                        transform: scale(2.5);
+                        opacity: 0;
+                    }
+                }
+
+                @keyframes gradientShift {
+                    0%, 100% {
+                        background-position: 0% 50%;
+                    }
+                    50% {
+                        background-position: 100% 50%;
+                    }
+                }
+
+                /* ============================================
                    RESPONSIVE ADJUSTMENTS
                    ============================================ */
                 @media (max-width: 768px) {
@@ -2858,6 +3142,485 @@
                     this.panel.style.transition = '';
                 }, 300);
             }
+
+            // Re-apply visual enhancements for the new theme
+            if (this._visualEnhancementsInitialized) {
+                this.applyThemeSpecificEffects();
+            }
+        },
+
+        /**
+         * Initialize 20X Visual Enhancements
+         */
+        initVisualEnhancements() {
+            console.log('[ui] Initializing 20X Visual Enhancements...');
+
+            // Add micro-interactions
+            this.addMicroInteractions();
+
+            // Add premium component enhancements
+            this.addPremiumEnhancements();
+
+            // Apply theme-specific effects
+            this.applyThemeSpecificEffects();
+
+            // Mark as initialized
+            this._visualEnhancementsInitialized = true;
+
+            console.log('[ui] Visual enhancements activated!');
+        },
+
+        /**
+         * Add micro-interactions to UI elements
+         */
+        addMicroInteractions() {
+            // Enhanced button interactions with liquid fill effect
+            const addButtonEffects = () => {
+                const buttons = document.querySelectorAll('.al-btn, button[class*="al-"]');
+                buttons.forEach(btn => {
+                    if (btn.dataset.enhanced) return; // Skip if already enhanced
+                    btn.dataset.enhanced = 'true';
+
+                    // Add liquid fill on hover
+                    btn.style.position = 'relative';
+                    btn.style.overflow = 'hidden';
+                    btn.style.transition = 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+
+                    btn.addEventListener('mouseenter', function(e) {
+                        this.style.transform = 'translateY(-2px) scale(1.02)';
+                        this.style.boxShadow = '0 8px 24px rgba(var(--accent-rgb), 0.3)';
+                    });
+
+                    btn.addEventListener('mouseleave', function(e) {
+                        this.style.transform = 'translateY(0) scale(1)';
+                        this.style.boxShadow = '';
+                    });
+
+                    btn.addEventListener('mousedown', function(e) {
+                        this.style.transform = 'translateY(0) scale(0.98)';
+                    });
+
+                    btn.addEventListener('mouseup', function(e) {
+                        this.style.transform = 'translateY(-2px) scale(1.02)';
+                    });
+
+                    // Liquid fill effect on click
+                    btn.addEventListener('click', function(e) {
+                        const ripple = document.createElement('span');
+                        const rect = this.getBoundingClientRect();
+                        const size = Math.max(rect.width, rect.height);
+                        const x = e.clientX - rect.left - size / 2;
+                        const y = e.clientY - rect.top - size / 2;
+
+                        ripple.style.cssText = `
+                            position: absolute;
+                            width: ${size}px;
+                            height: ${size}px;
+                            top: ${y}px;
+                            left: ${x}px;
+                            background: radial-gradient(circle, rgba(var(--accent-rgb), 0.3) 0%, transparent 70%);
+                            border-radius: 50%;
+                            pointer-events: none;
+                            animation: liquidFill 0.6s ease-out;
+                            z-index: 0;
+                        `;
+
+                        this.appendChild(ripple);
+                        setTimeout(() => ripple.remove(), 600);
+                    });
+                });
+            };
+
+            // Enhanced input field interactions
+            const addInputEffects = () => {
+                const inputs = document.querySelectorAll('input[type="text"], input[type="number"], textarea, select');
+                inputs.forEach(input => {
+                    if (input.dataset.enhanced) return;
+                    input.dataset.enhanced = 'true';
+
+                    input.style.transition = 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+
+                    input.addEventListener('focus', function() {
+                        this.style.transform = 'scale(1.02)';
+                        this.style.animation = 'focusGlow 0.3s forwards';
+                        this.style.backdropFilter = 'blur(20px) saturate(180%)';
+                    });
+
+                    input.addEventListener('blur', function() {
+                        this.style.transform = 'scale(1)';
+                        this.style.animation = '';
+                        this.style.boxShadow = '';
+                        this.style.backdropFilter = '';
+                    });
+                });
+            };
+
+            // Enhanced tab interactions
+            const addTabEffects = () => {
+                const tabs = document.querySelectorAll('.al-tab');
+                tabs.forEach(tab => {
+                    if (tab.dataset.enhanced) return;
+                    tab.dataset.enhanced = 'true';
+
+                    tab.style.transition = 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+
+                    tab.addEventListener('mouseenter', function() {
+                        if (!this.classList.contains('active')) {
+                            this.style.transform = 'translateY(-2px) scale(1.03)';
+                            this.style.boxShadow = '0 4px 12px rgba(var(--accent-rgb), 0.2)';
+                        }
+                    });
+
+                    tab.addEventListener('mouseleave', function() {
+                        if (!this.classList.contains('active')) {
+                            this.style.transform = '';
+                            this.style.boxShadow = '';
+                        }
+                    });
+                });
+            };
+
+            // Apply effects initially
+            addButtonEffects();
+            addInputEffects();
+            addTabEffects();
+
+            // Re-apply when DOM changes (for dynamic content)
+            const observer = new MutationObserver(() => {
+                addButtonEffects();
+                addInputEffects();
+                addTabEffects();
+            });
+
+            if (this.panel) {
+                observer.observe(this.panel, {
+                    childList: true,
+                    subtree: true
+                });
+            }
+        },
+
+        /**
+         * Add premium component enhancements
+         */
+        addPremiumEnhancements() {
+            // Enhanced toast notifications
+            const originalShowToast = this.showToast.bind(this);
+            this.showToast = (title, message, type = 'info') => {
+                originalShowToast(title, message, type);
+
+                // Find the toast and enhance it
+                setTimeout(() => {
+                    const toast = document.querySelector('.al-toast');
+                    if (toast && !toast.dataset.enhanced) {
+                        toast.dataset.enhanced = 'true';
+                        toast.style.animation = 'toastBounce 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
+
+                        // Add accent stripe with pulse
+                        const stripe = document.createElement('div');
+                        stripe.style.cssText = `
+                            position: absolute;
+                            top: 0;
+                            left: 0;
+                            width: 4px;
+                            height: 100%;
+                            background: linear-gradient(180deg,
+                                rgba(var(--accent-rgb), 1) 0%,
+                                rgba(var(--accent-rgb), 0.5) 100%);
+                            animation: neonPulse 2s ease-in-out infinite;
+                        `;
+                        toast.style.position = 'relative';
+                        toast.insertBefore(stripe, toast.firstChild);
+                    }
+                }, 50);
+            };
+
+            // Enhanced ticker bar
+            if (this.ticker) {
+                // Add wave animation to top border
+                const wave = document.createElement('div');
+                wave.style.cssText = `
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 200%;
+                    height: 2px;
+                    background: linear-gradient(90deg,
+                        transparent 0%,
+                        rgba(var(--accent-rgb), 0.5) 25%,
+                        rgba(var(--accent-rgb), 1) 50%,
+                        rgba(var(--accent-rgb), 0.5) 75%,
+                        transparent 100%);
+                    animation: waveMove 3s linear infinite;
+                    pointer-events: none;
+                `;
+                this.ticker.style.position = 'relative';
+                this.ticker.style.overflow = 'hidden';
+                this.ticker.insertBefore(wave, this.ticker.firstChild);
+            }
+
+            // Enhanced scrollbars
+            const style = document.createElement('style');
+            style.textContent = `
+                #al-panel ::-webkit-scrollbar {
+                    width: 8px;
+                    height: 8px;
+                }
+                #al-panel ::-webkit-scrollbar-track {
+                    background: rgba(var(--bg-secondary-rgb), 0.3);
+                    border-radius: 4px;
+                }
+                #al-panel ::-webkit-scrollbar-thumb {
+                    background: linear-gradient(180deg,
+                        rgba(var(--accent-rgb), 0.6) 0%,
+                        rgba(var(--accent-rgb), 0.3) 100%);
+                    border-radius: 4px;
+                    transition: all 0.3s ease;
+                }
+                #al-panel ::-webkit-scrollbar-thumb:hover {
+                    background: linear-gradient(180deg,
+                        rgba(var(--accent-rgb), 0.8) 0%,
+                        rgba(var(--accent-rgb), 0.5) 100%);
+                    box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.5);
+                }
+            `;
+            document.head.appendChild(style);
+        },
+
+        /**
+         * Apply theme-specific visual effects
+         */
+        applyThemeSpecificEffects() {
+            const theme = document.documentElement.getAttribute('data-al-theme') || 'dark';
+
+            // Remove any existing theme-specific effects
+            const existingEffects = document.querySelectorAll('.al-theme-effect');
+            existingEffects.forEach(el => el.remove());
+
+            switch(theme) {
+                case 'ocsd-sheriff':
+                    this.addTacticalEffects();
+                    break;
+                case 'high-contrast':
+                    this.addCyberEffects();
+                    break;
+                case 'light':
+                    this.addAuroraEffects();
+                    break;
+                case 'dark':
+                    this.addNeonEffects();
+                    break;
+            }
+        },
+
+        /**
+         * Add tactical effects for OCSD Sheriff theme
+         */
+        addTacticalEffects() {
+            if (!this.panel) return;
+
+            // Animated tactical gradient background
+            const headerGradient = this.panel.querySelector('.al-header');
+            if (headerGradient) {
+                headerGradient.style.background = `
+                    linear-gradient(135deg,
+                        #0b3b2e 0%,
+                        #0d4a3a 25%,
+                        #c9a227 50%,
+                        #0d4a3a 75%,
+                        #0b3b2e 100%)
+                `;
+                headerGradient.style.backgroundSize = '200% 200%';
+                headerGradient.style.animation = 'tacticalShift 20s ease infinite';
+            }
+
+            // Gold shimmer effect on hover for buttons
+            const buttons = this.panel.querySelectorAll('.al-btn');
+            buttons.forEach(btn => {
+                const originalBg = btn.style.background;
+                btn.addEventListener('mouseenter', function() {
+                    this.style.background = `
+                        linear-gradient(90deg,
+                            #c9a227 0%,
+                            #dcc48e 50%,
+                            #c9a227 100%)
+                    `;
+                    this.style.backgroundSize = '200% 100%';
+                    this.style.animation = 'goldShimmer 2s ease infinite';
+                });
+                btn.addEventListener('mouseleave', function() {
+                    this.style.background = originalBg;
+                    this.style.animation = '';
+                });
+            });
+
+            // Scanning line effect
+            const scanLine = document.createElement('div');
+            scanLine.className = 'al-theme-effect';
+            scanLine.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 2px;
+                background: linear-gradient(90deg,
+                    transparent 0%,
+                    rgba(201, 162, 39, 0.5) 50%,
+                    transparent 100%);
+                pointer-events: none;
+                animation: scanLine 4s linear infinite;
+                z-index: 10000;
+            `;
+            this.panel.appendChild(scanLine);
+        },
+
+        /**
+         * Add cyber effects for high contrast theme
+         */
+        addCyberEffects() {
+            if (!this.panel) return;
+
+            // Cyber grid overlay
+            const grid = document.createElement('div');
+            grid.className = 'al-theme-effect';
+            grid.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-image:
+                    linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px);
+                background-size: 20px 20px;
+                pointer-events: none;
+                animation: cyberGrid 2s linear infinite;
+                z-index: 1;
+            `;
+            this.panel.style.position = 'relative';
+            this.panel.insertBefore(grid, this.panel.firstChild);
+
+            // Glitch text effect on headers
+            const headers = this.panel.querySelectorAll('h1, h2, h3');
+            headers.forEach(header => {
+                setInterval(() => {
+                    header.style.animation = 'glitchText 0.3s ease';
+                    setTimeout(() => {
+                        header.style.animation = '';
+                    }, 300);
+                }, 8000);
+            });
+
+            // Terminal cursor effect
+            const title = this.panel.querySelector('.al-header h2, .al-header h3');
+            if (title) {
+                const cursor = document.createElement('span');
+                cursor.className = 'al-theme-effect';
+                cursor.textContent = '▮';
+                cursor.style.cssText = `
+                    color: #00ffff;
+                    animation: terminalCursor 1s step-end infinite;
+                    margin-left: 2px;
+                `;
+                title.appendChild(cursor);
+            }
+        },
+
+        /**
+         * Add aurora effects for light theme
+         */
+        addAuroraEffects() {
+            if (!this.panel) return;
+
+            // Aurora borealis background effect
+            const aurora = document.createElement('div');
+            aurora.className = 'al-theme-effect';
+            aurora.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(135deg,
+                    rgba(59, 130, 246, 0.05) 0%,
+                    rgba(139, 92, 246, 0.05) 25%,
+                    rgba(236, 72, 153, 0.05) 50%,
+                    rgba(59, 130, 246, 0.05) 75%,
+                    rgba(139, 92, 246, 0.05) 100%);
+                background-size: 400% 400%;
+                animation: auroraFlow 15s ease infinite;
+                pointer-events: none;
+                z-index: 1;
+            `;
+            this.panel.style.position = 'relative';
+            this.panel.insertBefore(aurora, this.panel.firstChild);
+
+            // Iridescent highlights on interactive elements
+            const interactives = this.panel.querySelectorAll('.al-btn, .al-tab');
+            interactives.forEach(el => {
+                el.addEventListener('mouseenter', function() {
+                    this.style.background = `
+                        linear-gradient(135deg,
+                            rgba(59, 130, 246, 0.1) 0%,
+                            rgba(139, 92, 246, 0.1) 50%,
+                            rgba(236, 72, 153, 0.1) 100%)
+                    `;
+                    this.style.backgroundSize = '200% 200%';
+                    this.style.animation = 'iridescent 2s ease infinite';
+                });
+                el.addEventListener('mouseleave', function() {
+                    this.style.animation = '';
+                });
+            });
+        },
+
+        /**
+         * Add neon effects for dark theme
+         */
+        addNeonEffects() {
+            if (!this.panel) return;
+
+            // Neon border animation on panel
+            const neonBorder = document.createElement('div');
+            neonBorder.className = 'al-theme-effect';
+            neonBorder.style.cssText = `
+                position: absolute;
+                top: -2px;
+                left: -2px;
+                right: -2px;
+                bottom: -2px;
+                border: 2px solid rgba(56, 189, 248, 0.5);
+                border-radius: var(--radius-xl);
+                pointer-events: none;
+                animation: neonBorder 3s ease-in-out infinite;
+                z-index: 10000;
+            `;
+            this.panel.style.position = 'relative';
+            this.panel.appendChild(neonBorder);
+
+            // Electric glow on active elements
+            const tabs = this.panel.querySelectorAll('.al-tab.active');
+            tabs.forEach(tab => {
+                tab.style.animation = 'neonPulse 2s ease-in-out infinite';
+            });
+
+            // Observe for new active tabs
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.attributeName === 'class') {
+                        const tab = mutation.target;
+                        if (tab.classList.contains('active')) {
+                            tab.style.animation = 'neonPulse 2s ease-in-out infinite';
+                        } else {
+                            tab.style.animation = '';
+                        }
+                    }
+                });
+            });
+
+            this.panel.querySelectorAll('.al-tab').forEach(tab => {
+                observer.observe(tab, { attributes: true });
+            });
         },
 
         /**
