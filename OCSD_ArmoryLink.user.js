@@ -77,6 +77,27 @@
         },
 
         /**
+         * Create throttled MutationObserver to reduce DOM watch overhead
+         * Batches mutations and only fires callback at most once per delay period
+         */
+        createThrottledObserver(callback, delay = 100) {
+            let timeout;
+            let mutations = [];
+
+            return new MutationObserver((mutationList) => {
+                mutations.push(...mutationList);
+
+                clearTimeout(timeout);
+                timeout = setTimeout(() => {
+                    if (mutations.length > 0) {
+                        callback(mutations);
+                        mutations = [];
+                    }
+                }, delay);
+            });
+        },
+
+        /**
          * Query selector that pierces shadow DOM boundaries
          */
         querySelectorDeep(selector, root = document) {
@@ -1157,6 +1178,7 @@
             this.loadSettings();
             this.setupConsoleIntercept();
             this.injectStyles();
+            this.loadTheme();  // Load theme after styles are injected
             this.createPanel();
             this.createTicker();
             this.createBubble();
@@ -1673,7 +1695,446 @@
                     from { opacity: 0; transform: scale(0.9); }
                     to { opacity: 1; transform: scale(1); }
                 }
+
+                /* ========================================
+                 * THEME SYSTEM
+                 * ======================================== */
+
+                /* Light Theme (Default) */
+                :root {
+                    --al-panel-bg: #ffffff;
+                    --al-panel-border: #d1d5db;
+                    --al-tab-bg: #f3f4f6;
+                    --al-tab-active-bg: #3b82f6;
+                    --al-tab-text: #374151;
+                    --al-tab-active-text: #ffffff;
+                    --al-ticker-bg: #f9fafb;
+                    --al-ticker-text: #111827;
+                    --al-ticker-deploy: #fbbf24;
+                    --al-ticker-return: #10b981;
+                    --al-ticker-alert: #ef4444;
+                    --al-toast-bg: #ffffff;
+                    --al-toast-border: #d1d5db;
+                    --al-toast-text: #111827;
+                    --al-text-primary: #111827;
+                    --al-text-secondary: #6b7280;
+                    --al-accent: #3b82f6;
+                    --al-content-bg: #f9fafb;
+                    --al-header-bg: #ffffff;
+                    --al-input-bg: #ffffff;
+                    --al-input-border: #d1d5db;
+                    --al-input-text: #111827;
+                    --al-button-bg: #3b82f6;
+                    --al-button-text: #ffffff;
+                    --al-button-hover-bg: #2563eb;
+                    --al-section-bg: #f3f4f6;
+                    --al-section-border: #e5e7eb;
+                    --al-code-bg: #f3f4f6;
+                    --al-label-text: #374151;
+                    --al-link-color: #3b82f6;
+                }
+
+                /* Dark Theme */
+                [data-al-theme="dark"] {
+                    --al-panel-bg: #1f2937;
+                    --al-panel-border: #374151;
+                    --al-tab-bg: #111827;
+                    --al-tab-active-bg: #3b82f6;
+                    --al-tab-text: #d1d5db;
+                    --al-tab-active-text: #ffffff;
+                    --al-ticker-bg: #111827;
+                    --al-ticker-text: #f3f4f6;
+                    --al-ticker-deploy: #fbbf24;
+                    --al-ticker-return: #10b981;
+                    --al-ticker-alert: #ef4444;
+                    --al-toast-bg: #374151;
+                    --al-toast-border: #4b5563;
+                    --al-toast-text: #f3f4f6;
+                    --al-text-primary: #f3f4f6;
+                    --al-text-secondary: #9ca3af;
+                    --al-accent: #60a5fa;
+                    --al-content-bg: #1f2937;
+                    --al-header-bg: #111827;
+                    --al-input-bg: #374151;
+                    --al-input-border: #4b5563;
+                    --al-input-text: #f3f4f6;
+                    --al-button-bg: #3b82f6;
+                    --al-button-text: #ffffff;
+                    --al-button-hover-bg: #2563eb;
+                    --al-section-bg: #2a2a2a;
+                    --al-section-border: #374151;
+                    --al-code-bg: #1e1e1e;
+                    --al-label-text: #d1d5db;
+                    --al-link-color: #60a5fa;
+                }
+
+                /* High Contrast Theme */
+                [data-al-theme="high-contrast"] {
+                    --al-panel-bg: #000000;
+                    --al-panel-border: #ffffff;
+                    --al-tab-bg: #000000;
+                    --al-tab-active-bg: #ffffff;
+                    --al-tab-text: #ffffff;
+                    --al-tab-active-text: #000000;
+                    --al-ticker-bg: #000000;
+                    --al-ticker-text: #ffffff;
+                    --al-ticker-deploy: #ffff00;
+                    --al-ticker-return: #00ff00;
+                    --al-ticker-alert: #ff0000;
+                    --al-toast-bg: #000000;
+                    --al-toast-border: #ffffff;
+                    --al-toast-text: #ffffff;
+                    --al-text-primary: #ffffff;
+                    --al-text-secondary: #ffffff;
+                    --al-accent: #00ffff;
+                    --al-content-bg: #000000;
+                    --al-header-bg: #000000;
+                    --al-input-bg: #000000;
+                    --al-input-border: #ffffff;
+                    --al-input-text: #ffffff;
+                    --al-button-bg: #ffffff;
+                    --al-button-text: #000000;
+                    --al-button-hover-bg: #cccccc;
+                    --al-section-bg: #000000;
+                    --al-section-border: #ffffff;
+                    --al-code-bg: #000000;
+                    --al-label-text: #ffffff;
+                    --al-link-color: #00ffff;
+                }
+
+                /* OCSD Sheriff Theme */
+                [data-al-theme="ocsd-sheriff"] {
+                    --al-panel-bg: #0a0a0a;
+                    --al-panel-border: #c9a227;
+                    --al-tab-bg: #0b3b2e;
+                    --al-tab-active-bg: linear-gradient(135deg, #c9a227, #dcc48e);
+                    --al-tab-text: #dcc48e;
+                    --al-tab-active-text: #0a0a0a;
+                    --al-ticker-bg: #0b3b2e;
+                    --al-ticker-text: #dcc48e;
+                    --al-ticker-deploy: #c9a227;
+                    --al-ticker-return: #0b3b2e;
+                    --al-ticker-alert: #dc2626;
+                    --al-toast-bg: #1c1c1c;
+                    --al-toast-border: #c9a227;
+                    --al-toast-text: #dcc48e;
+                    --al-text-primary: #dcc48e;
+                    --al-text-secondary: #c9a227;
+                    --al-accent: #c9a227;
+                    --al-content-bg: #0a0a0a;
+                    --al-header-bg: #0b3b2e;
+                    --al-input-bg: #1c1c1c;
+                    --al-input-border: #c9a227;
+                    --al-input-text: #dcc48e;
+                    --al-button-bg: #c9a227;
+                    --al-button-text: #0a0a0a;
+                    --al-button-hover-bg: #b38f1f;
+                    --al-section-bg: #0b3b2e;
+                    --al-section-border: #c9a227;
+                    --al-code-bg: #1c1c1c;
+                    --al-label-text: #dcc48e;
+                    --al-link-color: #c9a227;
+                }
+
+                /* Apply theme variables to components */
+                #al-panel {
+                    background: var(--al-panel-bg, #1e1e1e) !important;
+                    border-color: var(--al-panel-border, #333) !important;
+                    color: var(--al-text-primary, #e0e0e0) !important;
+                    transition: background 0.3s, border-color 0.3s, color 0.3s;
+                }
+
+                #al-header {
+                    background: var(--al-header-bg, #2a2a2a);
+                    color: var(--al-text-primary, #e0e0e0);
+                }
+
+                #al-content {
+                    background: var(--al-content-bg, #1e1e1e);
+                    color: var(--al-text-primary, #e0e0e0);
+                }
+
+                /* Tab buttons - apply theme but preserve original behavior */
+                #al-tabs {
+                    background: var(--al-header-bg, #252525) !important;
+                    border-bottom-color: var(--al-panel-border, #444) !important;
+                }
+
+                #al-tabs button {
+                    color: var(--al-tab-text, #999) !important;
+                }
+
+                #al-tabs button:hover {
+                    background: var(--al-section-bg, #2a2a2a) !important;
+                    color: var(--al-text-primary, #e0e0e0) !important;
+                }
+
+                #al-tabs button.active {
+                    color: var(--al-accent, #4CAF50) !important;
+                    border-bottom-color: var(--al-accent, #4CAF50) !important;
+                }
+
+                #al-ticker {
+                    background: var(--al-ticker-bg, #2a2a2a);
+                    color: var(--al-ticker-text, #e0e0e0);
+                    border-top: 1px solid var(--al-panel-border, #333);
+                }
+
+                .al-toast {
+                    background: var(--al-toast-bg, #ffffff);
+                    border: 1px solid var(--al-toast-border, #d1d5db);
+                    color: var(--al-toast-text, #111827);
+                }
+
+                /* Toast Container */
+                #al-toast-container {
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    z-index: 1000001;
+                    pointer-events: none;
+                }
+
+                .al-toast {
+                    padding: 12px 16px;
+                    margin-bottom: 10px;
+                    border-radius: 6px;
+                    min-width: 250px;
+                    max-width: 350px;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                    cursor: pointer;
+                    pointer-events: auto;
+                    opacity: 0;
+                    transform: translateX(20px);
+                    transition: all 0.3s ease;
+                }
+
+                .al-toast.al-toast-show {
+                    opacity: 1;
+                    transform: translateX(0);
+                }
+
+                .al-toast-success {
+                    border-color: #10b981 !important;
+                }
+
+                .al-toast-error {
+                    border-color: #ef4444 !important;
+                }
+
+                .al-toast-warning {
+                    border-color: #f59e0b !important;
+                }
+
+                .al-toast-info {
+                    border-color: #3b82f6 !important;
+                }
+
+                /* Apply theme variables to all components */
+
+                /* Buttons */
+                .al-btn {
+                    background: var(--al-button-bg) !important;
+                    color: var(--al-button-text) !important;
+                }
+
+                .al-btn:hover {
+                    background: var(--al-button-hover-bg) !important;
+                }
+
+                .al-btn-secondary {
+                    background: var(--al-section-bg) !important;
+                    color: var(--al-text-primary) !important;
+                    border: 1px solid var(--al-section-border);
+                }
+
+                /* Inputs and Textareas */
+                .al-input, .al-textarea {
+                    background: var(--al-input-bg) !important;
+                    color: var(--al-input-text) !important;
+                    border-color: var(--al-input-border) !important;
+                }
+
+                input[type="text"],
+                input[type="number"],
+                input[type="email"],
+                select,
+                textarea {
+                    background: var(--al-input-bg) !important;
+                    color: var(--al-input-text) !important;
+                    border-color: var(--al-input-border) !important;
+                }
+
+                /* Labels */
+                label,
+                .al-form-group label {
+                    color: var(--al-label-text) !important;
+                }
+
+                /* Form Groups / Sections */
+                .al-form-group,
+                div[style*="background: #2a2a2a"],
+                div[style*="background:#2a2a2a"] {
+                    background: var(--al-section-bg) !important;
+                    border-color: var(--al-section-border) !important;
+                }
+
+                /* Code blocks */
+                div[style*="background: #1e1e1e"],
+                div[style*="background:#1e1e1e"],
+                div[style*="background: #1a1a1a"],
+                div[style*="background:#1a1a1a"],
+                code,
+                pre {
+                    background: var(--al-code-bg) !important;
+                    color: var(--al-text-primary) !important;
+                }
+
+                /* Links */
+                a {
+                    color: var(--al-link-color) !important;
+                }
+
+                /* Small text / descriptions */
+                small {
+                    color: var(--al-text-secondary) !important;
+                }
+
+                /* Settings sections specifically */
+                #al-content > div[style*="background: #2a2a2a"] {
+                    background: var(--al-section-bg) !important;
+                    color: var(--al-text-primary) !important;
+                }
+
+                #al-content > div[style*="background: #2a2a2a"] h4 {
+                    color: var(--al-text-primary) !important;
+                    border-color: var(--al-section-border) !important;
+                }
             `);
+        },
+
+        /**
+         * Load saved theme
+         */
+        loadTheme() {
+            const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
+            const savedTheme = settings.theme || 'dark';  // Default to dark for backward compatibility
+            this.setTheme(savedTheme, false);  // Don't save on load
+        },
+
+        /**
+         * Set theme
+         */
+        setTheme(theme, save = true) {
+            const validThemes = ['light', 'dark', 'high-contrast', 'ocsd-sheriff'];
+            if (!validThemes.includes(theme)) {
+                theme = 'dark';
+            }
+
+            document.documentElement.setAttribute('data-al-theme', theme);
+
+            if (save) {
+                const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
+                settings.theme = theme;
+                AL.persistence.set('settings', settings);
+                console.log('[ui] Theme changed to:', theme);
+            }
+
+            // Update theme selector if it exists
+            const selector = document.getElementById('al-theme-selector');
+            if (selector && selector.value !== theme) {
+                selector.value = theme;
+            }
+
+            // Add smooth transition when theme changes
+            if (this.panel && save) {
+                this.panel.style.transition = 'all 0.3s ease';
+                setTimeout(() => {
+                    this.panel.style.transition = '';
+                }, 300);
+            }
+        },
+
+        /**
+         * Toast notification stack manager
+         */
+        toastStack: [],
+        maxToasts: 5,
+
+        /**
+         * Show toast notification
+         */
+        showToast(title, message, type = 'info', duration = 3000) {
+            // Create container if doesn't exist
+            let container = document.getElementById('al-toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'al-toast-container';
+                document.body.appendChild(container);
+            }
+
+            // Remove oldest if at max
+            if (this.toastStack.length >= this.maxToasts) {
+                const oldest = this.toastStack.shift();
+                if (oldest && oldest.element) {
+                    this.dismissToast(oldest.element);
+                }
+            }
+
+            // Create toast element
+            const toast = document.createElement('div');
+            toast.className = `al-toast al-toast-${type}`;
+
+            toast.innerHTML = `
+                <div style="font-weight: 600; margin-bottom: 4px;">${AL.utils.escapeHtml(title)}</div>
+                <div style="font-size: 13px; opacity: 0.9;">${AL.utils.escapeHtml(message)}</div>
+            `;
+
+            // Click to dismiss
+            toast.onclick = () => {
+                this.dismissToast(toast);
+            };
+
+            // Add to container
+            container.appendChild(toast);
+
+            // Animate in
+            setTimeout(() => {
+                toast.classList.add('al-toast-show');
+            }, 10);
+
+            // Track in stack
+            const toastItem = { element: toast, timeout: null };
+            this.toastStack.push(toastItem);
+
+            // Auto dismiss
+            if (duration > 0) {
+                toastItem.timeout = setTimeout(() => {
+                    this.dismissToast(toast);
+                }, duration);
+            }
+        },
+
+        /**
+         * Dismiss toast notification
+         */
+        dismissToast(toast) {
+            // Find in stack
+            const index = this.toastStack.findIndex(t => t.element === toast);
+            if (index !== -1) {
+                const item = this.toastStack[index];
+                if (item.timeout) clearTimeout(item.timeout);
+                this.toastStack.splice(index, 1);
+            }
+
+            // Animate out
+            toast.classList.remove('al-toast-show');
+
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
         },
 
         /**
@@ -2807,6 +3268,22 @@
                 <h3>Settings</h3>
                 <p style="margin-bottom: 20px;">Configure system preferences and behavior.</p>
 
+                <!-- Theme Settings -->
+                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Theme</h4>
+
+                    <div class="al-form-group">
+                        <label>Color Theme</label>
+                        <select class="al-input" id="al-theme-selector">
+                            <option value="light" ${(settings.theme || 'dark') === 'light' ? 'selected' : ''}>Light</option>
+                            <option value="dark" ${(settings.theme || 'dark') === 'dark' ? 'selected' : ''}>Dark</option>
+                            <option value="high-contrast" ${(settings.theme || 'dark') === 'high-contrast' ? 'selected' : ''}>High Contrast</option>
+                            <option value="ocsd-sheriff" ${(settings.theme || 'dark') === 'ocsd-sheriff' ? 'selected' : ''}>OCSD Sheriff</option>
+                        </select>
+                        <small>Choose your preferred color theme. Sheriff theme uses official OCSD branding colors.</small>
+                    </div>
+                </div>
+
                 <!-- Layout Settings -->
                 <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
                     <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Layout</h4>
@@ -2977,6 +3454,11 @@
             // Auto-save helper function
             const autoSave = () => {
                 this.saveSettingsFromForm(true); // Pass true to indicate auto-save (silent mode)
+            };
+
+            // Theme selector - apply theme immediately and save
+            document.getElementById('al-theme-selector').onchange = (e) => {
+                AL.ui.setTheme(e.target.value, true);
             };
 
             // Layout settings - auto-save on change
@@ -6383,16 +6865,26 @@
                 }
             }, 300);
 
-            // Set up mutation observer on document for tab changes
-            this._mutationObserver = new MutationObserver(() => {
-                this._throttledApply();
-            });
+            // Set up throttled mutation observer for tab changes
+            // Only check for relevant changes to reduce CPU overhead
+            this._mutationObserver = AL.utils.createThrottledObserver((mutations) => {
+                // Only apply if we see relevant changes (tabs or tab-related elements)
+                const relevant = mutations.some(m =>
+                    m.target.classList?.contains('sn-chrome-tabs') ||
+                    m.target.querySelector?.('.sn-chrome-tabs') ||
+                    m.target.closest?.('a[role="tab"]') ||
+                    (m.attributeName === 'aria-selected' && m.target.getAttribute?.('role') === 'tab')
+                );
+
+                if (relevant) {
+                    this._throttledApply();
+                }
+            }, 200);
 
             this._mutationObserver.observe(document.documentElement, {
                 childList: true,
                 subtree: true,
-                attributes: true,
-                attributeFilter: ['class', 'aria-selected']
+                attributes: false  // Don't watch all attributes - rely on tab click events instead
             });
 
             // Listen for clicks on tabs
