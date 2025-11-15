@@ -995,6 +995,7 @@
                 scanRaw: scanText,
                 cleanScan: scanText.trim(),
                 last4: AL.utils.getLastDigits(scanText, 4),
+                last3: AL.utils.getLastDigits(scanText, 3),
                 directive: directive
             };
 
@@ -1387,7 +1388,8 @@
                     color: #e0e0e0;
                     padding: var(--ticker-padding, 8px 12px);
                     font-size: var(--ticker-font-size, 13px);
-                    height: var(--ticker-height, 30px);
+                    min-height: var(--ticker-height, 30px);
+                    max-height: 80px;
                     box-sizing: border-box;
                     z-index: 1000000;
                     border-top: 1px solid #444;
@@ -1395,6 +1397,10 @@
                     justify-content: flex-start;
                     align-items: center;
                     gap: 20px;
+                    white-space: normal;
+                    word-wrap: break-word;
+                    overflow-y: auto;
+                    flex-wrap: wrap;
                 }
 
                 .al-ticker-status-dot {
@@ -2607,6 +2613,8 @@
         showToast(title, message, level = 'info', duration = 3000) {
             const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
             const position = settings.toastPosition || 'top-right';
+            const toastSize = settings.toastSize || 'medium';
+            const toastFontSize = settings.toastFontSize || 14;
 
             // Play sound if enabled
             if (settings.toastSound) {
@@ -2616,6 +2624,16 @@
             const toast = document.createElement('div');
             toast.className = `al-toast ${position} ${level}`;
             toast.innerHTML = `<strong>${title}</strong><br>${message}`;
+
+            // Apply size settings
+            const sizePadding = {
+                'small': '8px 12px',
+                'medium': '12px 16px',
+                'large': '16px 20px'
+            };
+
+            toast.style.padding = sizePadding[toastSize] || sizePadding['medium'];
+            toast.style.fontSize = `${toastFontSize}px`;
 
             document.body.appendChild(toast);
 
@@ -2632,7 +2650,19 @@
             if (!settings.speechEnabled) return;
 
             if ('speechSynthesis' in window) {
-                const utterance = new SpeechSynthesisUtterance(text);
+                // Transform numbers to digit-by-digit format
+                const digitWords = {
+                    '0': 'zero', '1': 'one', '2': 'two', '3': 'three', '4': 'four',
+                    '5': 'five', '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine'
+                };
+
+                // Replace each numeric sequence with digit-by-digit pronunciation
+                const processedText = text.replace(/\d+/g, (match) => {
+                    // Convert each digit to its spoken form
+                    return match.split('').map(digit => digitWords[digit] || digit).join(' ');
+                });
+
+                const utterance = new SpeechSynthesisUtterance(processedText);
                 utterance.rate = settings.speechRate || 1.0;
                 utterance.pitch = settings.speechPitch || 1.0;
                 window.speechSynthesis.speak(utterance);
@@ -3378,6 +3408,22 @@
                             <label for="al-setting-toast-sound" style="margin: 0;">Play Sound on Toast</label>
                         </div>
                     </div>
+
+                    <div class="al-form-group">
+                        <label>Toast Size</label>
+                        <select class="al-input" id="al-setting-toast-size">
+                            <option value="small" ${(settings.toastSize || 'medium') === 'small' ? 'selected' : ''}>Small</option>
+                            <option value="medium" ${(settings.toastSize || 'medium') === 'medium' ? 'selected' : ''}>Medium</option>
+                            <option value="large" ${(settings.toastSize || 'medium') === 'large' ? 'selected' : ''}>Large</option>
+                        </select>
+                        <small>Overall size and padding of toast notifications</small>
+                    </div>
+
+                    <div class="al-form-group">
+                        <label>Toast Font Size (px)</label>
+                        <input type="number" class="al-input" id="al-setting-toast-font-size" value="${settings.toastFontSize || 14}" min="10" max="24" step="1">
+                        <small>Font size for toast notification text</small>
+                    </div>
                 </div>
 
                 <!-- Speech Settings -->
@@ -3478,6 +3524,8 @@
             document.getElementById('al-setting-toast-duration').onchange = autoSave;
             document.getElementById('al-setting-toast-sticky').onchange = autoSave;
             document.getElementById('al-setting-toast-sound').onchange = autoSave;
+            document.getElementById('al-setting-toast-size').onchange = autoSave;
+            document.getElementById('al-setting-toast-font-size').onchange = autoSave;
 
             // Speech settings - auto-save on change
             document.getElementById('al-setting-speech-enabled').onchange = autoSave;
@@ -4515,7 +4563,21 @@
 
             content.innerHTML = `
                 <h3>Batch Scanning</h3>
-                <p style="margin-bottom: 15px; color: #999;">Collect multiple scans into a session</p>
+                <p style="margin-bottom: 15px; color: #999;">Collect multiple scans into a session or queue barcodes for processing</p>
+
+                <!-- Batch Queue Input -->
+                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Queue Multiple Barcodes</h4>
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; margin-bottom: 5px; font-size: 12px;">Paste barcodes (one per line):</label>
+                        <textarea id="al-batch-queue-input" class="al-input" rows="6" placeholder="Scan1&#10;Scan2&#10;Scan3&#10;...&#10;&#10;Paste or type one barcode per line, then click Queue Batch to process them sequentially." style="font-family: monospace; resize: vertical; min-height: 120px;"></textarea>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <button class="al-btn" id="al-batch-queue-btn">Queue Batch</button>
+                        <button class="al-btn al-btn-secondary" id="al-batch-clear-input-btn">Clear Input</button>
+                        <span id="al-batch-queue-status" style="margin-left: auto; font-size: 12px; color: #999;"></span>
+                    </div>
+                </div>
 
                 <!-- Session Controls -->
                 <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
@@ -4695,6 +4757,68 @@
                     this.renderBatch(content);
                 };
             });
+
+            // Batch queue handlers
+            const queueInput = document.getElementById('al-batch-queue-input');
+            const queueBtn = document.getElementById('al-batch-queue-btn');
+            const clearInputBtn = document.getElementById('al-batch-clear-input-btn');
+            const queueStatus = document.getElementById('al-batch-queue-status');
+
+            // Queue batch button
+            if (queueBtn) {
+                queueBtn.onclick = () => {
+                    const inputText = queueInput.value.trim();
+                    if (!inputText) {
+                        this.showToast('No Input', 'Please enter barcodes to queue', 'warning');
+                        return;
+                    }
+
+                    // Parse barcodes (one per line, ignore empty lines)
+                    const barcodes = inputText
+                        .split('\n')
+                        .map(line => line.trim())
+                        .filter(line => line.length > 0);
+
+                    if (barcodes.length === 0) {
+                        this.showToast('No Barcodes', 'No valid barcodes found', 'warning');
+                        return;
+                    }
+
+                    // Update status
+                    queueStatus.textContent = `Queuing ${barcodes.length} barcodes...`;
+                    queueStatus.style.color = '#ffaa00';
+
+                    // Enqueue each barcode through the existing capture queue
+                    let queued = 0;
+                    barcodes.forEach((barcode, index) => {
+                        // Add a small delay between each enqueue to prevent overwhelming the system
+                        setTimeout(() => {
+                            AL.capture.enqueue(barcode, 'batch');
+                            queued++;
+
+                            // Update status
+                            queueStatus.textContent = `Queued ${queued}/${barcodes.length}`;
+
+                            // Show completion toast
+                            if (queued === barcodes.length) {
+                                setTimeout(() => {
+                                    queueStatus.textContent = '';
+                                    queueInput.value = '';
+                                    this.showToast('Batch Queued', `${barcodes.length} barcodes added to processing queue`, 'success');
+                                }, 500);
+                            }
+                        }, index * 100); // 100ms delay between each barcode
+                    });
+                };
+            }
+
+            // Clear input button
+            if (clearInputBtn) {
+                clearInputBtn.onclick = () => {
+                    queueInput.value = '';
+                    queueStatus.textContent = '';
+                };
+            }
         },
 
         /**
@@ -5330,10 +5454,15 @@
                 }
 
                 return `
-                    <div class="al-action-item" data-index="${index}">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-size: 12px;">${display}</span>
-                            <button class="al-btn al-btn-danger" style="font-size: 11px; padding: 4px 8px;" onclick="AL.ui.removeAction(${index})">Remove</button>
+                    <div class="al-action-item" data-index="${index}" style="background: #1e1e1e; padding: 8px; margin-bottom: 6px; border-radius: 3px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                            <span style="font-size: 12px; flex: 1;">${display}</span>
+                            <div style="display: flex; gap: 4px;">
+                                <button class="al-btn al-btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="AL.ui.moveActionUp(${index})" ${index === 0 ? 'disabled' : ''}>↑</button>
+                                <button class="al-btn al-btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="AL.ui.moveActionDown(${index})" ${index === actions.length - 1 ? 'disabled' : ''}>↓</button>
+                                <button class="al-btn al-btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="AL.ui.editAction(${index})">Edit</button>
+                                <button class="al-btn al-btn-danger" style="font-size: 11px; padding: 4px 8px;" onclick="AL.ui.removeAction(${index})">Remove</button>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -5472,6 +5601,7 @@
                                     <option value="\${scanRaw}">\${scanRaw} - Full barcode</option>
                                     <option value="\${cleanScan}">\${cleanScan} - Trimmed barcode</option>
                                     <option value="\${last4}">\${last4} - Last 4 characters</option>
+                                    <option value="\${last3}">\${last3} - Last 3 characters</option>
                                     <option value="\${directive}">\${directive} - Directive (Deploy/Return)</option>
                                     <option value="\${group1}">\${group1} - Regex group 1</option>
                                     <option value="\${group2}">\${group2} - Regex group 2</option>
@@ -5679,6 +5809,345 @@
             if (!this._modalActions) return;
             this._modalActions.splice(index, 1);
             this.renderRuleActions(this._modalActions);
+        },
+
+        /**
+         * Move action up in the list
+         */
+        moveActionUp(index) {
+            if (!this._modalActions || index === 0) return;
+            [this._modalActions[index - 1], this._modalActions[index]] =
+                [this._modalActions[index], this._modalActions[index - 1]];
+            this.renderRuleActions(this._modalActions);
+        },
+
+        /**
+         * Move action down in the list
+         */
+        moveActionDown(index) {
+            if (!this._modalActions || index === this._modalActions.length - 1) return;
+            [this._modalActions[index], this._modalActions[index + 1]] =
+                [this._modalActions[index + 1], this._modalActions[index]];
+            this.renderRuleActions(this._modalActions);
+        },
+
+        /**
+         * Edit existing action
+         */
+        editAction(index) {
+            if (!this._modalActions || !this._modalActions[index]) return;
+
+            const action = this._modalActions[index];
+            this.showEditActionDialog(action, index);
+        },
+
+        /**
+         * Show edit action dialog with pre-populated values
+         */
+        showEditActionDialog(action, index) {
+            // Create action editor modal (similar to showAddActionDialog but with pre-filled values)
+            const actionOverlay = document.createElement('div');
+            actionOverlay.className = 'al-modal-overlay';
+            actionOverlay.id = 'al-modal-action-editor';
+            actionOverlay.style.zIndex = '10000001'; // Above rule editor
+
+            // Get available fields for dropdown
+            const fieldOptions = AL.fields.fields
+                .filter(f => f.enabled)
+                .map(f => `<option value="${f.key}" ${action.type === 'setField' && action.field === f.key ? 'selected' : ''}>${f.label} (${f.key})</option>`)
+                .join('');
+
+            actionOverlay.innerHTML = `
+                <div class="al-modal" onclick="event.stopPropagation()" style="max-width: 500px;">
+                    <div class="al-modal-header">
+                        <h3>Edit Action</h3>
+                        <button class="al-btn al-btn-secondary" onclick="document.getElementById('al-modal-action-editor').remove()">×</button>
+                    </div>
+                    <div class="al-modal-body">
+                        <div class="al-form-group">
+                            <label>Action Type *</label>
+                            <select class="al-input" id="al-action-type">
+                                <option value="">-- Select Action Type --</option>
+                                <option value="setField" ${action.type === 'setField' ? 'selected' : ''}>Set Field Value</option>
+                                <option value="setType" ${action.type === 'setType' ? 'selected' : ''}>Set Type Field</option>
+                                <option value="toast" ${action.type === 'toast' ? 'selected' : ''}>Show Toast Notification</option>
+                                <option value="speech" ${action.type === 'speech' ? 'selected' : ''}>Speak Text</option>
+                            </select>
+                        </div>
+
+                        <!-- setField form -->
+                        <div id="al-action-form-setField" style="display: ${action.type === 'setField' ? 'block' : 'none'};">
+                            <div class="al-form-group">
+                                <label>Field *</label>
+                                <select class="al-input" id="al-action-field">
+                                    <option value="">-- Select Field --</option>
+                                    ${fieldOptions}
+                                    <option value="externalContact" ${action.type === 'setField' && action.field === 'externalContact' ? 'selected' : ''}>External Loan</option>
+                                    <option value="department" ${action.type === 'setField' && action.field === 'department' ? 'selected' : ''}>Department</option>
+                                    <option value="comments" ${action.type === 'setField' && action.field === 'comments' ? 'selected' : ''}>Comments</option>
+                                </select>
+                            </div>
+                            <div class="al-form-group">
+                                <label>Value *</label>
+                                <input type="text" class="al-input" id="al-action-field-value" value="${AL.utils.escapeHtml(action.type === 'setField' ? action.value || '' : '')}" placeholder="e.g., \${scanRaw}, \${cleanScan}, \${group1}">
+                                <small>Use dropdown below to insert variables at cursor</small>
+                            </div>
+                        </div>
+
+                        <!-- setType form -->
+                        <div id="al-action-form-setType" style="display: ${action.type === 'setType' ? 'block' : 'none'};">
+                            <div class="al-form-group">
+                                <label>Type Value *</label>
+                                <select class="al-input" id="al-action-type-value">
+                                    <option value="\${directive}" ${action.type === 'setType' && action.value === '\${directive}' ? 'selected' : ''}>Use Directive Value (Deployment/Return)</option>
+                                    <option value="Deployment" ${action.type === 'setType' && action.value === 'Deployment' ? 'selected' : ''}>Deployment</option>
+                                    <option value="Return" ${action.type === 'setType' && action.value === 'Return' ? 'selected' : ''}>Return</option>
+                                    <option value="" ${action.type === 'setType' && action.value !== '\${directive}' && action.value !== 'Deployment' && action.value !== 'Return' ? 'selected' : ''}>Other (specify below)</option>
+                                </select>
+                            </div>
+                            <div class="al-form-group" id="al-type-custom-group" style="display: ${action.type === 'setType' && action.value !== '\${directive}' && action.value !== 'Deployment' && action.value !== 'Return' ? 'block' : 'none'};">
+                                <label>Custom Type Value</label>
+                                <input type="text" class="al-input" id="al-action-type-custom" value="${AL.utils.escapeHtml(action.type === 'setType' && action.value !== '\${directive}' && action.value !== 'Deployment' && action.value !== 'Return' ? action.value : '')}" placeholder="Enter custom type value">
+                            </div>
+                        </div>
+
+                        <!-- toast form -->
+                        <div id="al-action-form-toast" style="display: ${action.type === 'toast' ? 'block' : 'none'};">
+                            <div class="al-form-group">
+                                <label>Title</label>
+                                <input type="text" class="al-input" id="al-action-toast-title" value="${AL.utils.escapeHtml(action.type === 'toast' ? action.title || 'Notification' : 'Notification')}" placeholder="Toast title">
+                            </div>
+                            <div class="al-form-group">
+                                <label>Message *</label>
+                                <input type="text" class="al-input" id="al-action-toast-message" value="${AL.utils.escapeHtml(action.type === 'toast' ? action.message || '' : '')}" placeholder="e.g., Scanned: \${last4}">
+                                <small>Use dropdown below to insert variables at cursor</small>
+                            </div>
+                            <div class="al-form-group">
+                                <label>Level</label>
+                                <select class="al-input" id="al-action-toast-level">
+                                    <option value="info" ${action.type === 'toast' && action.level === 'info' ? 'selected' : ''}>Info (blue)</option>
+                                    <option value="success" ${action.type === 'toast' && action.level === 'success' ? 'selected' : ''}>Success (green)</option>
+                                    <option value="warning" ${action.type === 'toast' && action.level === 'warning' ? 'selected' : ''}>Warning (yellow)</option>
+                                    <option value="error" ${action.type === 'toast' && action.level === 'error' ? 'selected' : ''}>Error (red)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- speech form -->
+                        <div id="al-action-form-speech" style="display: ${action.type === 'speech' ? 'block' : 'none'};">
+                            <div class="al-form-group">
+                                <label>Speech Text *</label>
+                                <input type="text" class="al-input" id="al-action-speech-text" value="${AL.utils.escapeHtml(action.type === 'speech' ? action.text || '' : '')}" placeholder="e.g., PID \${last4}">
+                                <small>Use dropdown below to insert variables at cursor</small>
+                            </div>
+                        </div>
+
+                        <!-- Variable Insertion Tool -->
+                        <div class="al-form-group" style="background: #252525; padding: 12px; margin-bottom: 15px; border-radius: 4px;">
+                            <label style="font-weight: bold; margin-bottom: 8px; display: block;">🔧 Insert Variable</label>
+                            <div style="display: flex; gap: 8px; align-items: flex-start;">
+                                <select class="al-input" id="al-variable-selector" style="flex: 1;">
+                                    <option value="">-- Select Variable to Insert --</option>
+                                    <option value="\${scanRaw}">\${scanRaw} - Full barcode</option>
+                                    <option value="\${cleanScan}">\${cleanScan} - Trimmed barcode</option>
+                                    <option value="\${last4}">\${last4} - Last 4 characters</option>
+                                    <option value="\${last3}">\${last3} - Last 3 characters</option>
+                                    <option value="\${directive}">\${directive} - Directive (Deploy/Return)</option>
+                                    <option value="\${group1}">\${group1} - Regex group 1</option>
+                                    <option value="\${group2}">\${group2} - Regex group 2</option>
+                                    <option value="\${group3}">\${group3} - Regex group 3</option>
+                                    <option value="__custom__">Other / Custom regex group...</option>
+                                </select>
+                            </div>
+                            <div id="al-custom-group-container" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #333;">
+                                <label style="font-size: 12px; margin-bottom: 5px; display: block;">Custom Regex Group #</label>
+                                <div style="display: flex; gap: 8px;">
+                                    <input type="number" class="al-input" id="al-custom-group-number" placeholder="e.g., 4, 5, 6..." min="1" style="flex: 1;">
+                                    <button class="al-btn al-btn-secondary" id="al-insert-custom-group-btn" style="white-space: nowrap;">Insert</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="al-modal-footer">
+                        <button class="al-btn al-btn-secondary" onclick="document.getElementById('al-modal-action-editor').remove()">Cancel</button>
+                        <button class="al-btn" id="al-save-action-btn">Update Action</button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(actionOverlay);
+
+            // Close on overlay click
+            actionOverlay.onclick = () => actionOverlay.remove();
+
+            // Show/hide forms based on action type
+            document.getElementById('al-action-type').onchange = (e) => {
+                // Hide all forms
+                document.querySelectorAll('[id^="al-action-form-"]').forEach(el => el.style.display = 'none');
+
+                // Show selected form
+                const selectedType = e.target.value;
+                if (selectedType) {
+                    const formEl = document.getElementById(`al-action-form-${selectedType}`);
+                    if (formEl) formEl.style.display = 'block';
+                }
+            };
+
+            // Show/hide custom type field
+            const typeValueSelect = document.getElementById('al-action-type-value');
+            if (typeValueSelect) {
+                typeValueSelect.onchange = (e) => {
+                    document.getElementById('al-type-custom-group').style.display =
+                        e.target.value === '' ? 'block' : 'none';
+                };
+            }
+
+            // Track focus on all value input fields that can receive variables
+            const variableInputs = [
+                'al-action-field-value',
+                'al-action-type-custom',
+                'al-action-toast-title',
+                'al-action-toast-message',
+                'al-action-speech-text'
+            ];
+
+            variableInputs.forEach(id => {
+                const input = document.getElementById(id);
+                if (input) {
+                    input.onfocus = () => {
+                        this._lastFocusedVariableInput = input;
+                    };
+                }
+            });
+
+            // Variable selector dropdown
+            const variableSelector = document.getElementById('al-variable-selector');
+            if (variableSelector) {
+                variableSelector.onchange = (e) => {
+                    const selectedValue = e.target.value;
+
+                    if (selectedValue === '__custom__') {
+                        // Show custom group input
+                        document.getElementById('al-custom-group-container').style.display = 'block';
+                    } else if (selectedValue) {
+                        // Insert the selected variable
+                        this.insertVariableToken(selectedValue);
+                        // Reset dropdown
+                        e.target.value = '';
+                        // Hide custom group container if it was shown
+                        document.getElementById('al-custom-group-container').style.display = 'none';
+                    }
+                };
+            }
+
+            // Custom group insert button
+            const insertCustomGroupBtn = document.getElementById('al-insert-custom-group-btn');
+            if (insertCustomGroupBtn) {
+                insertCustomGroupBtn.onclick = () => {
+                    const groupNumber = document.getElementById('al-custom-group-number').value;
+                    if (!groupNumber || groupNumber < 1) {
+                        this.showToast('Invalid Group', 'Please enter a valid group number (1 or greater)', 'warning');
+                        return;
+                    }
+
+                    // Insert the custom group variable
+                    this.insertVariableToken(`\${group${groupNumber}}`);
+
+                    // Reset and hide custom group container
+                    document.getElementById('al-custom-group-number').value = '';
+                    document.getElementById('al-custom-group-container').style.display = 'none';
+                    document.getElementById('al-variable-selector').value = '';
+                };
+            }
+
+            // Allow Enter key to insert custom group
+            const customGroupInput = document.getElementById('al-custom-group-number');
+            if (customGroupInput) {
+                customGroupInput.onkeypress = (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        insertCustomGroupBtn.click();
+                    }
+                };
+            }
+
+            // Save action button (UPDATE existing action instead of adding new)
+            document.getElementById('al-save-action-btn').onclick = () => {
+                const actionType = document.getElementById('al-action-type').value;
+                if (!actionType) {
+                    this.showToast('Validation Error', 'Please select an action type', 'error');
+                    return;
+                }
+
+                let updatedAction = null;
+
+                switch (actionType) {
+                    case 'setField':
+                        const field = document.getElementById('al-action-field').value;
+                        const fieldValue = document.getElementById('al-action-field-value').value.trim();
+
+                        if (!field) {
+                            this.showToast('Validation Error', 'Please select a field', 'error');
+                            return;
+                        }
+                        if (!fieldValue) {
+                            this.showToast('Validation Error', 'Please enter a field value', 'error');
+                            return;
+                        }
+
+                        updatedAction = { type: 'setField', field, value: fieldValue };
+                        break;
+
+                    case 'setType':
+                        let typeValue = document.getElementById('al-action-type-value').value;
+                        if (typeValue === '') {
+                            typeValue = document.getElementById('al-action-type-custom').value.trim();
+                        }
+
+                        if (!typeValue) {
+                            this.showToast('Validation Error', 'Please select or enter a type value', 'error');
+                            return;
+                        }
+
+                        updatedAction = { type: 'setType', value: typeValue };
+                        break;
+
+                    case 'toast':
+                        const title = document.getElementById('al-action-toast-title').value.trim() || 'Notification';
+                        const message = document.getElementById('al-action-toast-message').value.trim();
+                        const level = document.getElementById('al-action-toast-level').value;
+
+                        if (!message) {
+                            this.showToast('Validation Error', 'Please enter a toast message', 'error');
+                            return;
+                        }
+
+                        updatedAction = { type: 'toast', title, message, level };
+                        break;
+
+                    case 'speech':
+                        const speechText = document.getElementById('al-action-speech-text').value.trim();
+
+                        if (!speechText) {
+                            this.showToast('Validation Error', 'Please enter speech text', 'error');
+                            return;
+                        }
+
+                        updatedAction = { type: 'speech', text: speechText };
+                        break;
+                }
+
+                if (updatedAction) {
+                    // Update the action at the specified index
+                    this._modalActions[index] = updatedAction;
+                    this.renderRuleActions(this._modalActions);
+
+                    // Close action editor
+                    actionOverlay.remove();
+
+                    this.showToast('Action Updated', 'Action updated successfully', 'success');
+                }
+            };
         },
 
         /**
