@@ -664,6 +664,7 @@
         scanBuffer: '',
         scanTimeout: null,
         recentScans: new Map(), // For duplicate suppression
+        scanHistory: [], // Persistent scan history
 
         // Mode labels
         modeLabels: {
@@ -677,10 +678,37 @@
             const savedMode = AL.persistence.get('captureMode', 'off');
             this.setMode(savedMode);
 
+            // Load scan history from storage
+            this.scanHistory = AL.persistence.get('scanHistory', []);
+
             // Set up keyboard listener for scanner input
             document.addEventListener('keydown', this.handleKeydown.bind(this));
 
             console.log('[capture] Initialized, mode:', this.mode);
+        },
+
+        /**
+         * Add entry to scan history
+         */
+        addToHistory(scan, type, rulesMatched, status, statusText) {
+            const entry = {
+                timestamp: Date.now(),
+                scan: scan,
+                type: type,
+                rulesMatched: rulesMatched || 0,
+                status: status || 'info',
+                statusText: statusText || 'Processed'
+            };
+
+            this.scanHistory.push(entry);
+
+            // Limit history to last 1000 entries
+            if (this.scanHistory.length > 1000) {
+                this.scanHistory = this.scanHistory.slice(-1000);
+            }
+
+            // Save to storage
+            AL.persistence.set('scanHistory', this.scanHistory);
         },
 
         /**
@@ -1123,10 +1151,86 @@
 
         init() {
             this.loadSettings();
+            this.setupConsoleIntercept();
             this.injectStyles();
             this.createPanel();
             this.createTicker();
-            console.log('[ui] Initialized');
+            this.addDebugLog('system', '[ui] Initialized');
+        },
+
+        /**
+         * Setup console intercept for debug logging
+         */
+        setupConsoleIntercept() {
+            // Store original console methods
+            this.originalConsole.log = console.log;
+            this.originalConsole.warn = console.warn;
+            this.originalConsole.error = console.error;
+
+            // Intercept console.log
+            console.log = (...args) => {
+                this.originalConsole.log.apply(console, args);
+                const message = args.map(arg =>
+                    typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+                ).join(' ');
+
+                // Detect category from message
+                let category = 'log';
+                if (message.includes('[rules]')) category = 'rules';
+                else if (message.includes('[capture]')) category = 'capture';
+                else if (message.includes('[ui]')) category = 'ui';
+                else if (message.includes('[bwc]')) category = 'bwc';
+                else if (message.includes('[x10]')) category = 'x10';
+                else if (message.includes('[') && message.includes(']')) category = 'system';
+
+                this.addDebugLog(category, message);
+            };
+
+            // Intercept console.warn
+            console.warn = (...args) => {
+                this.originalConsole.warn.apply(console, args);
+                const message = args.map(arg =>
+                    typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+                ).join(' ');
+                this.addDebugLog('warn', message);
+            };
+
+            // Intercept console.error
+            console.error = (...args) => {
+                this.originalConsole.error.apply(console, args);
+                const message = args.map(arg =>
+                    typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+                ).join(' ');
+                this.addDebugLog('error', message);
+            };
+        },
+
+        /**
+         * Add a debug log entry
+         */
+        addDebugLog(level, message) {
+            const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
+            if (!settings.debugEnabled) return;
+
+            this.debugLogs.push({
+                timestamp: Date.now(),
+                level: level,
+                message: message
+            });
+
+            // Limit log size to prevent memory issues (keep last 500 entries)
+            if (this.debugLogs.length > 500) {
+                this.debugLogs = this.debugLogs.slice(-500);
+            }
+
+            // If debug tab is currently visible, update it
+            if (this.currentTab === 'debug') {
+                const content = document.getElementById('al-content');
+                if (content) {
+                    // Refresh the debug tab to show new log
+                    this.renderDebug(content);
+                }
+            }
         },
 
         /**
@@ -1707,8 +1811,36 @@
                     this.renderPrefixes(content);
                     break;
 
+                case 'macros':
+                    this.renderMacros(content);
+                    break;
+
+                case 'favorites':
+                    this.renderFavorites(content);
+                    break;
+
+                case 'bwc':
+                    this.renderBWC(content);
+                    break;
+
+                case 'x10':
+                    this.renderX10(content);
+                    break;
+
                 case 'settings':
                     this.renderSettings(content);
+                    break;
+
+                case 'batch':
+                    this.renderBatch(content);
+                    break;
+
+                case 'history':
+                    this.renderHistory(content);
+                    break;
+
+                case 'debug':
+                    this.renderDebug(content);
                     break;
 
                 default:
@@ -2442,6 +2574,1431 @@
                     this.renderSettings(content);
                 }
             };
+        },
+
+        /**
+         * Render BWC tab
+         */
+        renderBWC(content) {
+            const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
+            const bwcSettings = {
+                enabled: settings.bwcEnabled !== false,
+                useIframe: settings.bwcUseIframe !== false,
+                baseUrl: settings.bwcBaseUrl || 'https://evidence.com'
+            };
+
+            content.innerHTML = `
+                <h3>Body Worn Camera (BWC)</h3>
+                <p style="margin-bottom: 15px; color: #999;">Axon Evidence.com integration</p>
+
+                <!-- Settings -->
+                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Settings</h4>
+
+                    <div class="al-form-group">
+                        <div class="al-checkbox-group">
+                            <input type="checkbox" id="al-bwc-enabled" ${bwcSettings.enabled ? 'checked' : ''}>
+                            <label for="al-bwc-enabled" style="margin: 0;">Enable BWC Integration</label>
+                        </div>
+                    </div>
+
+                    <div class="al-form-group">
+                        <label>Display Mode</label>
+                        <select class="al-input" id="al-bwc-mode">
+                            <option value="iframe" ${bwcSettings.useIframe ? 'selected' : ''}>Embedded iframe (recommended)</option>
+                            <option value="tab" ${!bwcSettings.useIframe ? 'selected' : ''}>New browser tab</option>
+                        </select>
+                        <small>How to display Evidence.com when launched</small>
+                    </div>
+
+                    <div class="al-form-group">
+                        <label>Base URL</label>
+                        <input type="text" class="al-input" id="al-bwc-base-url" value="${bwcSettings.baseUrl}" placeholder="https://evidence.com">
+                        <small>Evidence.com base URL for your agency</small>
+                    </div>
+
+                    <button class="al-btn al-btn-primary" id="al-bwc-save-settings-btn">Save Settings</button>
+                </div>
+
+                <!-- Launch Controls -->
+                <div style="background: #2a2a2a; padding: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Quick Launch</h4>
+
+                    <p style="font-size: 12px; color: #999; margin-bottom: 15px;">
+                        Automatically reads User field from active ServiceNow page to look up camera assignments.
+                    </p>
+
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                        <button class="al-btn al-btn-primary" id="al-bwc-launch-btn" ${!bwcSettings.enabled ? 'disabled' : ''}>
+                            🎥 Launch Evidence.com
+                        </button>
+                        <button class="al-btn al-btn-secondary" id="al-bwc-launch-inventory-btn" ${!bwcSettings.enabled ? 'disabled' : ''}>
+                            View Inventory
+                        </button>
+                    </div>
+
+                    ${bwcSettings.useIframe ? `
+                        <div id="al-bwc-iframe-container" style="
+                            background: #1a1a1a;
+                            border: 1px solid #333;
+                            border-radius: 4px;
+                            height: 500px;
+                            overflow: hidden;
+                            display: none;
+                        ">
+                            <div style="background: #2a2a2a; padding: 8px; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 10px;">
+                                <span style="flex: 1; font-size: 11px; color: #999;" id="al-bwc-iframe-url">No page loaded</span>
+                                <button class="al-btn al-btn-secondary" id="al-bwc-iframe-close" style="padding: 4px 8px; font-size: 11px;">Close</button>
+                            </div>
+                            <iframe id="al-bwc-iframe" style="width: 100%; height: calc(100% - 40px); border: none;"></iframe>
+                        </div>
+                    ` : ''}
+
+                    <div style="margin-top: 15px; font-size: 11px; color: #666;">
+                        <strong>Note:</strong> BWC integration is read-only from ServiceNow's perspective.
+                        No data is written back to ServiceNow fields.
+                    </div>
+                </div>
+            `;
+
+            // Event handlers
+            document.getElementById('al-bwc-save-settings-btn').onclick = () => {
+                const enabled = document.getElementById('al-bwc-enabled').checked;
+                const useIframe = document.getElementById('al-bwc-mode').value === 'iframe';
+                const baseUrl = document.getElementById('al-bwc-base-url').value.trim();
+
+                const updatedSettings = {
+                    ...settings,
+                    bwcEnabled: enabled,
+                    bwcUseIframe: useIframe,
+                    bwcBaseUrl: baseUrl
+                };
+
+                AL.persistence.set('settings', updatedSettings);
+                this.showToast('Settings Saved', 'BWC settings have been updated', 'success');
+                this.renderBWC(content);
+            };
+
+            document.getElementById('al-bwc-launch-btn').onclick = () => {
+                const user = AL.fields.getFieldValue('user');
+                const url = bwcSettings.baseUrl;
+
+                if (bwcSettings.useIframe) {
+                    const container = document.getElementById('al-bwc-iframe-container');
+                    const iframe = document.getElementById('al-bwc-iframe');
+                    const urlDisplay = document.getElementById('al-bwc-iframe-url');
+
+                    container.style.display = 'block';
+                    iframe.src = url;
+                    urlDisplay.textContent = url;
+
+                    this.showToast('BWC Launched', user ? `Loading for user: ${user}` : 'Opening Evidence.com', 'info');
+                } else {
+                    window.open(url, '_blank');
+                    this.showToast('BWC Launched', 'Opened in new tab', 'info');
+                }
+            };
+
+            document.getElementById('al-bwc-launch-inventory-btn').onclick = () => {
+                const url = `${bwcSettings.baseUrl}/inventory`;
+
+                if (bwcSettings.useIframe) {
+                    const container = document.getElementById('al-bwc-iframe-container');
+                    const iframe = document.getElementById('al-bwc-iframe');
+                    const urlDisplay = document.getElementById('al-bwc-iframe-url');
+
+                    container.style.display = 'block';
+                    iframe.src = url;
+                    urlDisplay.textContent = url;
+
+                    this.showToast('BWC Inventory', 'Loading inventory view', 'info');
+                } else {
+                    window.open(url, '_blank');
+                    this.showToast('BWC Inventory', 'Opened in new tab', 'info');
+                }
+            };
+
+            if (bwcSettings.useIframe) {
+                const closeBtn = document.getElementById('al-bwc-iframe-close');
+                if (closeBtn) {
+                    closeBtn.onclick = () => {
+                        const container = document.getElementById('al-bwc-iframe-container');
+                        const iframe = document.getElementById('al-bwc-iframe');
+                        container.style.display = 'none';
+                        iframe.src = 'about:blank';
+                    };
+                }
+            }
+        },
+
+        /**
+         * Render X10 tab
+         */
+        renderX10(content) {
+            const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
+            const x10Settings = {
+                enabled: settings.x10Enabled !== false,
+                useIframe: settings.x10UseIframe !== false,
+                baseUrl: settings.x10BaseUrl || 'https://my.taser.com'
+            };
+
+            content.innerHTML = `
+                <h3>TASER X10</h3>
+                <p style="margin-bottom: 15px; color: #999;">TASER device management integration</p>
+
+                <!-- Settings -->
+                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Settings</h4>
+
+                    <div class="al-form-group">
+                        <div class="al-checkbox-group">
+                            <input type="checkbox" id="al-x10-enabled" ${x10Settings.enabled ? 'checked' : ''}>
+                            <label for="al-x10-enabled" style="margin: 0;">Enable X10 Integration</label>
+                        </div>
+                    </div>
+
+                    <div class="al-form-group">
+                        <label>Display Mode</label>
+                        <select class="al-input" id="al-x10-mode">
+                            <option value="iframe" ${x10Settings.useIframe ? 'selected' : ''}>Embedded iframe (recommended)</option>
+                            <option value="tab" ${!x10Settings.useIframe ? 'selected' : ''}>New browser tab</option>
+                        </select>
+                        <small>How to display TASER site when launched</small>
+                    </div>
+
+                    <div class="al-form-group">
+                        <label>Base URL</label>
+                        <input type="text" class="al-input" id="al-x10-base-url" value="${x10Settings.baseUrl}" placeholder="https://my.taser.com">
+                        <small>TASER management base URL for your agency</small>
+                    </div>
+
+                    <button class="al-btn al-btn-primary" id="al-x10-save-settings-btn">Save Settings</button>
+                </div>
+
+                <!-- Launch Controls -->
+                <div style="background: #2a2a2a; padding: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Quick Launch</h4>
+
+                    <p style="font-size: 12px; color: #999; margin-bottom: 15px;">
+                        Automatically reads Taser Asset field from active ServiceNow page to look up device info.
+                    </p>
+
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                        <button class="al-btn al-btn-primary" id="al-x10-launch-btn" ${!x10Settings.enabled ? 'disabled' : ''}>
+                            ⚡ Launch TASER Site
+                        </button>
+                        <button class="al-btn al-btn-secondary" id="al-x10-launch-inventory-btn" ${!x10Settings.enabled ? 'disabled' : ''}>
+                            View Inventory
+                        </button>
+                    </div>
+
+                    ${x10Settings.useIframe ? `
+                        <div id="al-x10-iframe-container" style="
+                            background: #1a1a1a;
+                            border: 1px solid #333;
+                            border-radius: 4px;
+                            height: 500px;
+                            overflow: hidden;
+                            display: none;
+                        ">
+                            <div style="background: #2a2a2a; padding: 8px; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 10px;">
+                                <span style="flex: 1; font-size: 11px; color: #999;" id="al-x10-iframe-url">No page loaded</span>
+                                <button class="al-btn al-btn-secondary" id="al-x10-iframe-close" style="padding: 4px 8px; font-size: 11px;">Close</button>
+                            </div>
+                            <iframe id="al-x10-iframe" style="width: 100%; height: calc(100% - 40px); border: none;"></iframe>
+                        </div>
+                    ` : ''}
+
+                    <div style="margin-top: 15px; font-size: 11px; color: #666;">
+                        <strong>Note:</strong> X10 integration is read-only from ServiceNow's perspective.
+                        No data is written back to ServiceNow fields.
+                    </div>
+                </div>
+            `;
+
+            // Event handlers
+            document.getElementById('al-x10-save-settings-btn').onclick = () => {
+                const enabled = document.getElementById('al-x10-enabled').checked;
+                const useIframe = document.getElementById('al-x10-mode').value === 'iframe';
+                const baseUrl = document.getElementById('al-x10-base-url').value.trim();
+
+                const updatedSettings = {
+                    ...settings,
+                    x10Enabled: enabled,
+                    x10UseIframe: useIframe,
+                    x10BaseUrl: baseUrl
+                };
+
+                AL.persistence.set('settings', updatedSettings);
+                this.showToast('Settings Saved', 'X10 settings have been updated', 'success');
+                this.renderX10(content);
+            };
+
+            document.getElementById('al-x10-launch-btn').onclick = () => {
+                const taser = AL.fields.getFieldValue('taser');
+                const url = x10Settings.baseUrl;
+
+                if (x10Settings.useIframe) {
+                    const container = document.getElementById('al-x10-iframe-container');
+                    const iframe = document.getElementById('al-x10-iframe');
+                    const urlDisplay = document.getElementById('al-x10-iframe-url');
+
+                    container.style.display = 'block';
+                    iframe.src = url;
+                    urlDisplay.textContent = url;
+
+                    this.showToast('X10 Launched', taser ? `Loading for device: ${taser}` : 'Opening TASER site', 'info');
+                } else {
+                    window.open(url, '_blank');
+                    this.showToast('X10 Launched', 'Opened in new tab', 'info');
+                }
+            };
+
+            document.getElementById('al-x10-launch-inventory-btn').onclick = () => {
+                const url = `${x10Settings.baseUrl}/inventory`;
+
+                if (x10Settings.useIframe) {
+                    const container = document.getElementById('al-x10-iframe-container');
+                    const iframe = document.getElementById('al-x10-iframe');
+                    const urlDisplay = document.getElementById('al-x10-iframe-url');
+
+                    container.style.display = 'block';
+                    iframe.src = url;
+                    urlDisplay.textContent = url;
+
+                    this.showToast('X10 Inventory', 'Loading inventory view', 'info');
+                } else {
+                    window.open(url, '_blank');
+                    this.showToast('X10 Inventory', 'Opened in new tab', 'info');
+                }
+            };
+
+            if (x10Settings.useIframe) {
+                const closeBtn = document.getElementById('al-x10-iframe-close');
+                if (closeBtn) {
+                    closeBtn.onclick = () => {
+                        const container = document.getElementById('al-x10-iframe-container');
+                        const iframe = document.getElementById('al-x10-iframe');
+                        container.style.display = 'none';
+                        iframe.src = 'about:blank';
+                    };
+                }
+            }
+        },
+
+        /**
+         * Render Favorites/Prefills tab
+         */
+        renderFavorites(content) {
+            // Initialize favorites storage if not exists
+            if (!AL.favorites) {
+                AL.favorites = {
+                    items: AL.persistence.get('favorites', []),
+                    save() {
+                        AL.persistence.set('favorites', this.items);
+                    },
+                    add(favorite) {
+                        favorite.id = favorite.id || AL.utils.generateId();
+                        favorite.created = Date.now();
+                        this.items.push(favorite);
+                        this.save();
+                    },
+                    update(id, updates) {
+                        const index = this.items.findIndex(f => f.id === id);
+                        if (index >= 0) {
+                            this.items[index] = { ...this.items[index], ...updates };
+                            this.save();
+                        }
+                    },
+                    delete(id) {
+                        this.items = this.items.filter(f => f.id !== id);
+                        this.save();
+                    }
+                };
+            }
+
+            const favorites = AL.favorites.items;
+
+            content.innerHTML = `
+                <h3>Favorites / Prefills</h3>
+                <p style="margin-bottom: 15px; color: #999;">Save and restore field configurations</p>
+
+                <!-- Snapshot Current State Button -->
+                <div style="margin-bottom: 15px;">
+                    <button class="al-btn al-btn-primary" id="al-snapshot-btn">📸 Snapshot Current Fields</button>
+                    <small style="color: #666; margin-left: 10px; font-size: 11px;">Save current field values as a favorite</small>
+                </div>
+
+                <!-- Favorites List -->
+                <div style="background: #2a2a2a; padding: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">
+                        Saved Favorites (${favorites.length})
+                    </h4>
+
+                    ${favorites.length === 0 ? `
+                        <div style="color: #666; padding: 40px; text-align: center;">
+                            <div style="font-size: 48px; margin-bottom: 10px;">⭐</div>
+                            <div>No favorites saved</div>
+                            <div style="font-size: 11px; margin-top: 5px;">Snapshot current field values to create a favorite</div>
+                        </div>
+                    ` : `
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            ${favorites.slice().reverse().map(fav => `
+                                <div style="
+                                    background: #1a1a1a;
+                                    border: 1px solid #444;
+                                    border-left: 3px solid #ffaa00;
+                                    border-radius: 4px;
+                                    padding: 12px;
+                                ">
+                                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                        <div style="flex: 1;">
+                                            <div style="font-weight: 600;">
+                                                ${fav.name || 'Unnamed Favorite'}
+                                            </div>
+                                            ${fav.description ? `
+                                                <div style="font-size: 11px; color: #666; margin-top: 2px;">
+                                                    ${fav.description}
+                                                </div>
+                                            ` : ''}
+                                            <div style="font-size: 11px; color: #999; margin-top: 4px;">
+                                                Created: ${new Date(fav.created).toLocaleString()}
+                                            </div>
+                                        </div>
+                                        <div style="display: flex; gap: 5px;">
+                                            <button class="al-btn al-btn-primary al-fav-apply-btn" data-fav-id="${fav.id}" title="Apply to Fields">
+                                                Apply
+                                            </button>
+                                            <button class="al-btn al-btn-secondary al-fav-edit-btn" data-fav-id="${fav.id}" title="Edit">
+                                                ✎
+                                            </button>
+                                            <button class="al-btn al-btn-danger al-fav-delete-btn" data-fav-id="${fav.id}" title="Delete">
+                                                ✕
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div style="font-size: 11px; color: #666; background: #0a0a0a; padding: 8px; border-radius: 3px; margin-top: 8px;">
+                                        <div style="font-weight: 600; margin-bottom: 4px;">Field Values:</div>
+                                        ${Object.entries(fav.fieldValues || {}).map(([key, value]) => `
+                                            <div style="margin: 2px 0;">
+                                                <span style="color: #00aaff;">${key}:</span>
+                                                <span style="color: #e0e0e0;">${value || '<empty>'}</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `}
+                </div>
+            `;
+
+            // Snapshot button
+            document.getElementById('al-snapshot-btn').onclick = () => {
+                this.showFavoriteEditor();
+            };
+
+            // Apply buttons
+            document.querySelectorAll('.al-fav-apply-btn').forEach(btn => {
+                btn.onclick = async () => {
+                    const favId = btn.dataset.favId;
+                    const fav = favorites.find(f => f.id === favId);
+                    if (fav) {
+                        await this.applyFavorite(fav);
+                    }
+                };
+            });
+
+            // Edit buttons
+            document.querySelectorAll('.al-fav-edit-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const favId = btn.dataset.favId;
+                    const fav = favorites.find(f => f.id === favId);
+                    if (fav) {
+                        this.showFavoriteEditor(fav);
+                    }
+                };
+            });
+
+            // Delete buttons
+            document.querySelectorAll('.al-fav-delete-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const favId = btn.dataset.favId;
+                    const fav = favorites.find(f => f.id === favId);
+                    if (fav && confirm(`Delete favorite "${fav.name}"?`)) {
+                        AL.favorites.delete(favId);
+                        this.showToast('Favorite Deleted', `${fav.name} has been removed`, 'success');
+                        this.renderFavorites(content);
+                    }
+                };
+            });
+        },
+
+        /**
+         * Show favorite editor modal
+         */
+        showFavoriteEditor(favorite = null) {
+            const isEdit = favorite !== null;
+            const title = isEdit ? 'Edit Favorite' : 'Create Favorite from Current Fields';
+
+            // Snapshot current field values if creating new
+            let fieldValues = {};
+            if (!isEdit && AL.fields && AL.fields.fields) {
+                AL.fields.fields.forEach(field => {
+                    if (field.enabled && field.roles?.includes('write')) {
+                        const value = AL.fields.getFieldValue(field.key);
+                        if (value) {
+                            fieldValues[field.key] = value;
+                        }
+                    }
+                });
+            } else if (isEdit) {
+                fieldValues = favorite.fieldValues || {};
+            }
+
+            const editFavorite = favorite || {
+                id: null,
+                name: '',
+                description: '',
+                fieldValues: fieldValues
+            };
+
+            // Create modal overlay
+            const overlay = document.createElement('div');
+            overlay.id = 'al-modal-favorite-editor';
+            overlay.className = 'al-modal-overlay';
+            overlay.innerHTML = `
+                <div class="al-modal" style="max-width: 600px; max-height: 80vh; overflow-y: auto;">
+                    <div class="al-modal-header">
+                        <h3>${title}</h3>
+                    </div>
+                    <div class="al-modal-body">
+                        <div class="al-form-group">
+                            <label>Favorite Name *</label>
+                            <input type="text" class="al-input" id="al-fav-name" value="${editFavorite.name}" placeholder="e.g., Standard Deployment">
+                        </div>
+
+                        <div class="al-form-group">
+                            <label>Description</label>
+                            <textarea class="al-input" id="al-fav-description" rows="2" placeholder="Optional description">${editFavorite.description || ''}</textarea>
+                        </div>
+
+                        <div class="al-form-group">
+                            <label>Field Values</label>
+                            <div style="
+                                background: #1a1a1a;
+                                border: 1px solid #333;
+                                border-radius: 4px;
+                                padding: 12px;
+                                max-height: 300px;
+                                overflow-y: auto;
+                            ">
+                                ${Object.keys(editFavorite.fieldValues).length === 0 ? `
+                                    <div style="color: #666; text-align: center; padding: 20px; font-size: 11px;">
+                                        No field values captured
+                                    </div>
+                                ` : Object.entries(editFavorite.fieldValues).map(([key, value]) => `
+                                    <div style="margin-bottom: 10px; background: #0a0a0a; padding: 8px; border-radius: 3px;">
+                                        <div style="font-size: 11px; color: #00aaff; margin-bottom: 4px;">${key}</div>
+                                        <input type="text" class="al-input al-fav-field-value" data-field-key="${key}" value="${value || ''}" style="width: 100%; font-size: 11px;">
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <small style="color: #666; font-size: 11px;">You can edit the values before saving</small>
+                        </div>
+                    </div>
+                    <div class="al-modal-footer">
+                        <button class="al-btn al-btn-secondary" id="al-fav-cancel-btn">Cancel</button>
+                        <button class="al-btn al-btn-primary" id="al-fav-save-btn">${isEdit ? 'Update' : 'Save'} Favorite</button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(overlay);
+
+            // Cancel button
+            document.getElementById('al-fav-cancel-btn').onclick = () => {
+                overlay.remove();
+            };
+
+            // Save button
+            document.getElementById('al-fav-save-btn').onclick = () => {
+                const name = document.getElementById('al-fav-name').value.trim();
+                const description = document.getElementById('al-fav-description').value.trim();
+
+                if (!name) {
+                    this.showToast('Validation Error', 'Please enter a favorite name', 'error');
+                    return;
+                }
+
+                // Collect field values from inputs
+                const updatedFieldValues = {};
+                document.querySelectorAll('.al-fav-field-value').forEach(input => {
+                    const key = input.dataset.fieldKey;
+                    const value = input.value.trim();
+                    if (value) {
+                        updatedFieldValues[key] = value;
+                    }
+                });
+
+                const favData = {
+                    id: editFavorite.id,
+                    name,
+                    description,
+                    fieldValues: updatedFieldValues
+                };
+
+                if (isEdit) {
+                    AL.favorites.update(favData.id, favData);
+                    this.showToast('Favorite Updated', `${name} has been updated`, 'success');
+                } else {
+                    AL.favorites.add(favData);
+                    this.showToast('Favorite Saved', `${name} has been saved`, 'success');
+                }
+
+                overlay.remove();
+                const content = document.getElementById('al-content');
+                if (content && this.currentTab === 'favorites') this.renderFavorites(content);
+            };
+
+            // Close on overlay click
+            overlay.onclick = (e) => {
+                if (e.target === overlay) overlay.remove();
+            };
+        },
+
+        /**
+         * Apply favorite to ServiceNow fields
+         */
+        async applyFavorite(favorite) {
+            if (!favorite || !favorite.fieldValues) {
+                this.showToast('Error', 'Invalid favorite data', 'error');
+                return;
+            }
+
+            let successCount = 0;
+            let failCount = 0;
+
+            for (const [fieldKey, value] of Object.entries(favorite.fieldValues)) {
+                try {
+                    const success = await AL.fields.setFieldValue(fieldKey, value);
+                    if (success) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                    }
+                } catch (error) {
+                    console.error(`[favorites] Error setting field ${fieldKey}:`, error);
+                    failCount++;
+                }
+
+                // Small delay between field updates
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+
+            if (successCount > 0) {
+                this.showToast(
+                    'Favorite Applied',
+                    `${successCount} field${successCount !== 1 ? 's' : ''} updated${failCount > 0 ? `, ${failCount} failed` : ''}`,
+                    failCount > 0 ? 'warning' : 'success'
+                );
+            } else {
+                this.showToast('Apply Failed', 'No fields were updated', 'error');
+            }
+        },
+
+        /**
+         * Render Macros tab
+         */
+        renderMacros(content) {
+            const macros = AL.macros.macros || [];
+
+            content.innerHTML = `
+                <h3>Macros</h3>
+                <p style="margin-bottom: 15px; color: #999;">Define reusable action sequences</p>
+
+                <!-- Add Macro Button -->
+                <div style="margin-bottom: 15px;">
+                    <button class="al-btn al-btn-primary" id="al-add-macro-btn">+ Add Macro</button>
+                </div>
+
+                <!-- Macro List -->
+                <div style="background: #2a2a2a; padding: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">
+                        Macros (${macros.length})
+                    </h4>
+
+                    ${macros.length === 0 ? `
+                        <div style="color: #666; padding: 40px; text-align: center;">
+                            <div style="font-size: 48px; margin-bottom: 10px;">⚙️</div>
+                            <div>No macros defined</div>
+                            <div style="font-size: 11px; margin-top: 5px;">Create a macro to automate sequences of actions</div>
+                        </div>
+                    ` : `
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            ${macros.map(macro => `
+                                <div style="
+                                    background: #1a1a1a;
+                                    border: 1px solid ${macro.enabled ? '#444' : '#333'};
+                                    border-left: 3px solid ${macro.enabled ? '#00aaff' : '#666'};
+                                    border-radius: 4px;
+                                    padding: 12px;
+                                ">
+                                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                        <input type="checkbox" ${macro.enabled ? 'checked' : ''}
+                                            onchange="AL.macros.updateMacro('${macro.id}', { enabled: this.checked }); AL.ui.renderMacros(document.getElementById('al-content'));">
+                                        <div style="flex: 1;">
+                                            <div style="font-weight: 600; color: ${macro.enabled ? '#e0e0e0' : '#999'};">
+                                                ${macro.name || 'Unnamed Macro'}
+                                            </div>
+                                            ${macro.description ? `
+                                                <div style="font-size: 11px; color: #666; margin-top: 2px;">
+                                                    ${macro.description}
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                        <div style="display: flex; gap: 5px;">
+                                            <button class="al-btn al-btn-secondary" onclick="AL.macros.executeMacro('${macro.id}'); AL.ui.showToast('Macro Executed', '${macro.name}', 'success');" title="Execute">
+                                                ▶
+                                            </button>
+                                            <button class="al-btn al-btn-secondary al-macro-edit-btn" data-macro-id="${macro.id}" title="Edit">
+                                                ✎
+                                            </button>
+                                            <button class="al-btn al-btn-danger al-macro-delete-btn" data-macro-id="${macro.id}" title="Delete">
+                                                ✕
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div style="font-size: 11px; color: #666; margin-left: 28px;">
+                                        ${macro.actions?.length || 0} action${(macro.actions?.length || 0) !== 1 ? 's' : ''}
+                                        ${macro.hotkey ? ` • Hotkey: ${macro.hotkey}` : ''}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `}
+                </div>
+            `;
+
+            // Event handlers
+            document.getElementById('al-add-macro-btn').onclick = () => {
+                this.showMacroEditor();
+            };
+
+            // Edit buttons
+            document.querySelectorAll('.al-macro-edit-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const macroId = btn.dataset.macroId;
+                    const macro = macros.find(m => m.id === macroId);
+                    if (macro) {
+                        this.showMacroEditor(macro);
+                    }
+                };
+            });
+
+            // Delete buttons
+            document.querySelectorAll('.al-macro-delete-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const macroId = btn.dataset.macroId;
+                    const macro = macros.find(m => m.id === macroId);
+                    if (macro && confirm(`Delete macro "${macro.name}"?`)) {
+                        AL.macros.deleteMacro(macroId);
+                        this.showToast('Macro Deleted', `${macro.name} has been removed`, 'success');
+                        this.renderMacros(content);
+                    }
+                };
+            });
+        },
+
+        /**
+         * Show macro editor modal
+         */
+        showMacroEditor(macro = null) {
+            const isEdit = macro !== null;
+            const title = isEdit ? 'Edit Macro' : 'Add New Macro';
+
+            const editMacro = macro || {
+                id: null,
+                name: '',
+                description: '',
+                enabled: true,
+                hotkey: '',
+                actions: []
+            };
+
+            // Create modal overlay
+            const overlay = document.createElement('div');
+            overlay.id = 'al-modal-macro-editor';
+            overlay.className = 'al-modal-overlay';
+            overlay.innerHTML = `
+                <div class="al-modal" style="max-width: 600px; max-height: 80vh; overflow-y: auto;">
+                    <div class="al-modal-header">
+                        <h3>${title}</h3>
+                    </div>
+                    <div class="al-modal-body">
+                        <div class="al-form-group">
+                            <label>Macro Name *</label>
+                            <input type="text" class="al-input" id="al-macro-name" value="${editMacro.name}" placeholder="e.g., Quick Return">
+                        </div>
+
+                        <div class="al-form-group">
+                            <label>Description</label>
+                            <textarea class="al-input" id="al-macro-description" rows="2" placeholder="Optional description of what this macro does">${editMacro.description || ''}</textarea>
+                        </div>
+
+                        <div class="al-form-group">
+                            <label>Hotkey (optional)</label>
+                            <input type="text" class="al-input" id="al-macro-hotkey" value="${editMacro.hotkey || ''}" placeholder="e.g., Ctrl+Shift+R" maxlength="20">
+                            <small>Keyboard shortcut to execute this macro</small>
+                        </div>
+
+                        <div class="al-form-group">
+                            <div class="al-checkbox-group">
+                                <input type="checkbox" id="al-macro-enabled" ${editMacro.enabled ? 'checked' : ''}>
+                                <label for="al-macro-enabled" style="margin: 0;">Enabled</label>
+                            </div>
+                        </div>
+
+                        <div class="al-form-group">
+                            <label>Actions</label>
+                            <div id="al-macro-actions-list" style="
+                                background: #1a1a1a;
+                                border: 1px solid #333;
+                                border-radius: 4px;
+                                padding: 10px;
+                                min-height: 100px;
+                                max-height: 200px;
+                                overflow-y: auto;
+                            ">
+                                ${editMacro.actions.length === 0 ? `
+                                    <div style="color: #666; text-align: center; padding: 20px; font-size: 11px;">
+                                        No actions yet. Click "Add Action" below.
+                                    </div>
+                                ` : editMacro.actions.map((action, index) => {
+                                    let display = '';
+                                    switch (action.type) {
+                                        case 'setField':
+                                            display = `Set ${action.field} = "${action.value}"`;
+                                            break;
+                                        case 'setType':
+                                            display = `Set Type = "${action.value}"`;
+                                            break;
+                                        case 'toast':
+                                            display = `Toast: ${action.message || action.title}`;
+                                            break;
+                                        case 'speech':
+                                            display = `Speak: "${action.text}"`;
+                                            break;
+                                        case 'wait':
+                                            display = `Wait ${action.duration || 1000}ms`;
+                                            break;
+                                        default:
+                                            display = action.type;
+                                    }
+                                    return `
+                                        <div style="
+                                            background: #0a0a0a;
+                                            padding: 8px;
+                                            margin-bottom: 5px;
+                                            border-radius: 3px;
+                                            display: flex;
+                                            align-items: center;
+                                            gap: 8px;
+                                            font-size: 11px;
+                                        ">
+                                            <span style="color: #999;">${index + 1}.</span>
+                                            <span style="flex: 1;">${display}</span>
+                                            <button class="al-btn-icon al-macro-action-remove" data-index="${index}">✕</button>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                            <button class="al-btn al-btn-secondary" id="al-macro-add-action-btn" style="margin-top: 8px;">+ Add Action</button>
+                            <small style="color: #666; font-size: 11px;">Actions will execute in order from top to bottom</small>
+                        </div>
+                    </div>
+                    <div class="al-modal-footer">
+                        <button class="al-btn al-btn-secondary" id="al-macro-cancel-btn">Cancel</button>
+                        <button class="al-btn al-btn-primary" id="al-macro-save-btn">${isEdit ? 'Update' : 'Create'} Macro</button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(overlay);
+
+            // Store actions temporarily
+            let tempActions = [...editMacro.actions];
+
+            // Render actions list
+            const renderActionsList = () => {
+                const listContainer = document.getElementById('al-macro-actions-list');
+                if (tempActions.length === 0) {
+                    listContainer.innerHTML = `
+                        <div style="color: #666; text-align: center; padding: 20px; font-size: 11px;">
+                            No actions yet. Click "Add Action" below.
+                        </div>
+                    `;
+                } else {
+                    listContainer.innerHTML = tempActions.map((action, index) => {
+                        let display = '';
+                        switch (action.type) {
+                            case 'setField':
+                                display = `Set ${action.field} = "${action.value}"`;
+                                break;
+                            case 'setType':
+                                display = `Set Type = "${action.value}"`;
+                                break;
+                            case 'toast':
+                                display = `Toast: ${action.message || action.title}`;
+                                break;
+                            case 'speech':
+                                display = `Speak: "${action.text}"`;
+                                break;
+                            case 'wait':
+                                display = `Wait ${action.duration || 1000}ms`;
+                                break;
+                            default:
+                                display = action.type;
+                        }
+                        return `
+                            <div style="
+                                background: #0a0a0a;
+                                padding: 8px;
+                                margin-bottom: 5px;
+                                border-radius: 3px;
+                                display: flex;
+                                align-items: center;
+                                gap: 8px;
+                                font-size: 11px;
+                            ">
+                                <span style="color: #999;">${index + 1}.</span>
+                                <span style="flex: 1;">${display}</span>
+                                <button class="al-btn-icon al-macro-action-remove" data-index="${index}">✕</button>
+                            </div>
+                        `;
+                    }).join('');
+
+                    // Reattach remove handlers
+                    document.querySelectorAll('.al-macro-action-remove').forEach(btn => {
+                        btn.onclick = () => {
+                            const index = parseInt(btn.dataset.index);
+                            tempActions.splice(index, 1);
+                            renderActionsList();
+                        };
+                    });
+                }
+            };
+
+            // Add action button - reuse the rule action editor
+            document.getElementById('al-macro-add-action-btn').onclick = () => {
+                // We can reuse the showActionEditor from rules
+                this.showActionEditor(null, (newAction) => {
+                    tempActions.push(newAction);
+                    renderActionsList();
+                });
+            };
+
+            // Cancel button
+            document.getElementById('al-macro-cancel-btn').onclick = () => {
+                overlay.remove();
+            };
+
+            // Save button
+            document.getElementById('al-macro-save-btn').onclick = () => {
+                const name = document.getElementById('al-macro-name').value.trim();
+                const description = document.getElementById('al-macro-description').value.trim();
+                const hotkey = document.getElementById('al-macro-hotkey').value.trim();
+                const enabled = document.getElementById('al-macro-enabled').checked;
+
+                if (!name) {
+                    this.showToast('Validation Error', 'Please enter a macro name', 'error');
+                    return;
+                }
+
+                const macroData = {
+                    id: editMacro.id || AL.utils.generateId(),
+                    name,
+                    description,
+                    hotkey,
+                    enabled,
+                    actions: tempActions
+                };
+
+                if (isEdit) {
+                    AL.macros.updateMacro(macroData.id, macroData);
+                    this.showToast('Macro Updated', `${name} has been updated`, 'success');
+                } else {
+                    AL.macros.addMacro(macroData);
+                    this.showToast('Macro Created', `${name} has been created`, 'success');
+                }
+
+                overlay.remove();
+                const content = document.getElementById('al-content');
+                if (content) this.renderMacros(content);
+            };
+
+            // Close on overlay click
+            overlay.onclick = (e) => {
+                if (e.target === overlay) overlay.remove();
+            };
+        },
+
+        /**
+         * Render Batch tab
+         */
+        renderBatch(content) {
+            // Initialize batch session if not exists
+            if (!AL.capture.batchSession) {
+                AL.capture.batchSession = {
+                    active: false,
+                    scans: [],
+                    applyRules: false,
+                    startTime: null
+                };
+            }
+
+            const batch = AL.capture.batchSession;
+            const isActive = batch.active;
+
+            content.innerHTML = `
+                <h3>Batch Scanning</h3>
+                <p style="margin-bottom: 15px; color: #999;">Collect multiple scans into a session</p>
+
+                <!-- Session Controls -->
+                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Session Control</h4>
+
+                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
+                        <button class="al-btn ${isActive ? 'al-btn-danger' : 'al-btn-primary'}" id="al-batch-toggle-btn">
+                            ${isActive ? '⏹ Stop Session' : '▶ Start Session'}
+                        </button>
+                        <div style="margin-left: auto; font-size: 12px; color: #999;">
+                            ${isActive ? `<span style="color: #00ff88;">● Active</span> | ${batch.scans.length} scans` : 'Inactive'}
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="al-batch-apply-rules" ${batch.applyRules ? 'checked' : ''} ${isActive ? 'disabled' : ''}>
+                            <span>Apply rules to scans in batch</span>
+                        </label>
+                        <small style="color: #999; margin-left: 24px; font-size: 11px;">
+                            When enabled, rules will process each scan. When disabled, scans are collected without processing.
+                        </small>
+                    </div>
+
+                    ${isActive && batch.startTime ? `
+                        <div style="font-size: 11px; color: #666; margin-top: 10px;">
+                            Started: ${new Date(batch.startTime).toLocaleString()}
+                        </div>
+                    ` : ''}
+                </div>
+
+                <!-- Batch Actions -->
+                <div style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button class="al-btn al-btn-secondary" id="al-batch-clear-btn" ${batch.scans.length === 0 ? 'disabled' : ''}>Clear All</button>
+                    <button class="al-btn al-btn-secondary" id="al-batch-export-btn" ${batch.scans.length === 0 ? 'disabled' : ''}>Export to JSON</button>
+                    <button class="al-btn al-btn-secondary" id="al-batch-export-csv-btn" ${batch.scans.length === 0 ? 'disabled' : ''}>Export to CSV</button>
+                </div>
+
+                <!-- Scan List -->
+                <div style="background: #2a2a2a; padding: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">
+                        Scans in Batch (${batch.scans.length})
+                    </h4>
+
+                    <div style="
+                        background: #1a1a1a;
+                        border: 1px solid #333;
+                        border-radius: 4px;
+                        height: 350px;
+                        overflow-y: auto;
+                        padding: 8px;
+                    ">
+                        ${batch.scans.length === 0 ? `
+                            <div style="color: #666; padding: 40px; text-align: center;">
+                                <div style="font-size: 48px; margin-bottom: 10px;">📦</div>
+                                <div>No scans in batch</div>
+                                <div style="font-size: 11px; margin-top: 5px;">
+                                    ${isActive ? 'Scans will be added automatically' : 'Start a session to begin collecting scans'}
+                                </div>
+                            </div>
+                        ` : `
+                            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                                <thead style="position: sticky; top: 0; background: #2a2a2a; border-bottom: 2px solid #444;">
+                                    <tr>
+                                        <th style="padding: 8px; text-align: left; font-weight: 600;">#</th>
+                                        <th style="padding: 8px; text-align: left; font-weight: 600;">Time</th>
+                                        <th style="padding: 8px; text-align: left; font-weight: 600;">Scan</th>
+                                        <th style="padding: 8px; text-align: center; font-weight: 600;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${batch.scans.map((scan, index) => {
+                                        const time = new Date(scan.timestamp).toLocaleTimeString();
+                                        return `
+                                            <tr style="border-bottom: 1px solid #2a2a2a;">
+                                                <td style="padding: 8px; color: #999;">${index + 1}</td>
+                                                <td style="padding: 8px; white-space: nowrap; color: #999;">${time}</td>
+                                                <td style="padding: 8px;">
+                                                    <code style="background: #0a0a0a; padding: 2px 6px; border-radius: 3px; font-size: 11px;">${scan.value}</code>
+                                                </td>
+                                                <td style="padding: 8px; text-align: center;">
+                                                    <button class="al-btn-icon al-batch-remove-btn" data-index="${index}" title="Remove">
+                                                        ✕
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        `}
+                    </div>
+                </div>
+            `;
+
+            // Event handlers
+            const toggleBtn = document.getElementById('al-batch-toggle-btn');
+            const applyRulesCheckbox = document.getElementById('al-batch-apply-rules');
+            const clearBtn = document.getElementById('al-batch-clear-btn');
+            const exportBtn = document.getElementById('al-batch-export-btn');
+            const exportCsvBtn = document.getElementById('al-batch-export-csv-btn');
+            const removeButtons = document.querySelectorAll('.al-batch-remove-btn');
+
+            // Toggle batch session
+            toggleBtn.onclick = () => {
+                if (isActive) {
+                    // Stop session
+                    batch.active = false;
+                    this.showToast('Session Stopped', `Collected ${batch.scans.length} scans`, 'info');
+                } else {
+                    // Start session
+                    batch.active = true;
+                    batch.startTime = Date.now();
+                    this.showToast('Session Started', 'Batch scanning is now active', 'success');
+                }
+                this.renderBatch(content);
+            };
+
+            // Apply rules toggle
+            applyRulesCheckbox.onchange = (e) => {
+                batch.applyRules = e.target.checked;
+            };
+
+            // Clear all scans
+            clearBtn.onclick = () => {
+                if (confirm(`Clear all ${batch.scans.length} scans from batch?`)) {
+                    batch.scans = [];
+                    this.showToast('Batch Cleared', 'All scans removed', 'success');
+                    this.renderBatch(content);
+                }
+            };
+
+            // Export to JSON
+            exportBtn.onclick = () => {
+                const data = {
+                    exportTime: new Date().toISOString(),
+                    sessionStart: batch.startTime ? new Date(batch.startTime).toISOString() : null,
+                    totalScans: batch.scans.length,
+                    scans: batch.scans
+                };
+                const dataStr = JSON.stringify(data, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `ocsd-batch-${Date.now()}.json`;
+                link.click();
+                URL.revokeObjectURL(url);
+                this.showToast('Export Complete', 'Batch exported to JSON', 'success');
+            };
+
+            // Export to CSV
+            exportCsvBtn.onclick = () => {
+                const headers = ['Index', 'Timestamp', 'Time', 'Scan'];
+                const rows = batch.scans.map((scan, index) => [
+                    index + 1,
+                    scan.timestamp,
+                    new Date(scan.timestamp).toLocaleString(),
+                    scan.value
+                ]);
+                const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+                const dataBlob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `ocsd-batch-${Date.now()}.csv`;
+                link.click();
+                URL.revokeObjectURL(url);
+                this.showToast('Export Complete', 'Batch exported to CSV', 'success');
+            };
+
+            // Remove individual scans
+            removeButtons.forEach(btn => {
+                btn.onclick = () => {
+                    const index = parseInt(btn.dataset.index);
+                    batch.scans.splice(index, 1);
+                    this.renderBatch(content);
+                };
+            });
+        },
+
+        /**
+         * Render History tab
+         */
+        renderHistory(content) {
+            const scanHistory = AL.capture.scanHistory || [];
+
+            content.innerHTML = `
+                <h3>Scan History</h3>
+                <p style="margin-bottom: 15px; color: #999;">Record of all processed scans</p>
+
+                <!-- Controls -->
+                <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+                    <button class="al-btn al-btn-secondary" id="al-history-clear-btn">Clear History</button>
+                    <button class="al-btn al-btn-secondary" id="al-history-export-btn">Export to JSON</button>
+                    <div style="margin-left: auto;">
+                        <span style="color: #999; font-size: 12px;">${scanHistory.length} scans</span>
+                    </div>
+                </div>
+
+                <!-- History Table -->
+                <div style="
+                    background: #1a1a1a;
+                    border: 1px solid #333;
+                    border-radius: 4px;
+                    height: 500px;
+                    overflow-y: auto;
+                ">
+                    ${scanHistory.length === 0 ? `
+                        <div style="color: #666; padding: 40px; text-align: center;">
+                            <div style="font-size: 48px; margin-bottom: 10px;">📋</div>
+                            <div>No scan history yet</div>
+                            <div style="font-size: 11px; margin-top: 5px;">Scans will appear here as they are processed</div>
+                        </div>
+                    ` : `
+                        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                            <thead style="position: sticky; top: 0; background: #2a2a2a; border-bottom: 2px solid #444;">
+                                <tr>
+                                    <th style="padding: 10px; text-align: left; font-weight: 600;">Time</th>
+                                    <th style="padding: 10px; text-align: left; font-weight: 600;">Scan</th>
+                                    <th style="padding: 10px; text-align: left; font-weight: 600;">Type</th>
+                                    <th style="padding: 10px; text-align: left; font-weight: 600;">Rules Matched</th>
+                                    <th style="padding: 10px; text-align: left; font-weight: 600;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${scanHistory.slice().reverse().map(entry => {
+                                    const time = new Date(entry.timestamp).toLocaleTimeString();
+                                    const date = new Date(entry.timestamp).toLocaleDateString();
+                                    const statusColors = {
+                                        success: '#00ff88',
+                                        warning: '#ffaa00',
+                                        error: '#ff4444',
+                                        info: '#00aaff'
+                                    };
+                                    const statusColor = statusColors[entry.status] || '#e0e0e0';
+
+                                    return `
+                                        <tr style="border-bottom: 1px solid #2a2a2a;">
+                                            <td style="padding: 10px; white-space: nowrap;">
+                                                <div style="font-size: 11px; color: #999;">${date}</div>
+                                                <div>${time}</div>
+                                            </td>
+                                            <td style="padding: 10px;">
+                                                <code style="background: #2a2a2a; padding: 2px 6px; border-radius: 3px; font-size: 11px;">${entry.scan || 'N/A'}</code>
+                                            </td>
+                                            <td style="padding: 10px;">
+                                                ${entry.type ? `<span style="color: ${entry.type === 'Deployment' ? '#00ff88' : '#ffaa00'};">${entry.type}</span>` : '<span style="color: #666;">—</span>'}
+                                            </td>
+                                            <td style="padding: 10px; font-size: 11px; color: #999;">
+                                                ${entry.rulesMatched > 0 ? `${entry.rulesMatched} rule${entry.rulesMatched !== 1 ? 's' : ''}` : 'None'}
+                                            </td>
+                                            <td style="padding: 10px;">
+                                                <span style="color: ${statusColor};">●</span>
+                                                <span style="font-size: 11px; color: #999;">${entry.statusText || 'Processed'}</span>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    `}
+                </div>
+            `;
+
+            // Event handlers
+            const clearBtn = document.getElementById('al-history-clear-btn');
+            const exportBtn = document.getElementById('al-history-export-btn');
+
+            clearBtn.onclick = () => {
+                if (confirm('Clear all scan history?')) {
+                    AL.capture.scanHistory = [];
+                    AL.persistence.set('scanHistory', []);
+                    this.showToast('History Cleared', 'Scan history has been cleared', 'success');
+                    this.renderHistory(content);
+                }
+            };
+
+            exportBtn.onclick = () => {
+                const dataStr = JSON.stringify(scanHistory, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `ocsd-scan-history-${Date.now()}.json`;
+                link.click();
+                URL.revokeObjectURL(url);
+                this.showToast('Export Complete', 'Scan history exported', 'success');
+            };
+        },
+
+        /**
+         * Render Debug tab
+         */
+        renderDebug(content) {
+            const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
+            const debugLogs = this.debugLogs || [];
+
+            // Calculate stats
+            const stats = {
+                totalScans: AL.capture.scanQueue?.length || 0,
+                queuedScans: AL.capture.scanQueue?.filter(s => !s.processed).length || 0,
+                totalRules: AL.rules.rules?.length || 0,
+                enabledRules: AL.rules.rules?.filter(r => r.enabled).length || 0,
+                totalFields: AL.fields.fields?.length || 0,
+                enabledFields: AL.fields.fields?.filter(f => f.enabled).length || 0,
+                totalPrefixes: AL.prefixes.prefixes?.length || 0,
+                totalMacros: AL.macros.macros?.length || 0,
+                isLeader: AL.broadcast.isLeader,
+                captureMode: AL.capture.mode,
+                lastScan: AL.capture.lastScan || 'None'
+            };
+
+            content.innerHTML = `
+                <h3>Debug Console</h3>
+                <p style="margin-bottom: 15px; color: #999;">System logs and diagnostics</p>
+
+                <!-- Stats Panel -->
+                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">System Statistics</h4>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; font-size: 12px;">
+                        <div><strong>Mode:</strong> ${stats.captureMode}</div>
+                        <div><strong>Leader:</strong> ${stats.isLeader ? 'Yes' : 'No'}</div>
+                        <div><strong>Queue:</strong> ${stats.queuedScans} / ${stats.totalScans}</div>
+                        <div><strong>Last Scan:</strong> ${stats.lastScan}</div>
+                        <div><strong>Rules:</strong> ${stats.enabledRules} / ${stats.totalRules}</div>
+                        <div><strong>Fields:</strong> ${stats.enabledFields} / ${stats.totalFields}</div>
+                        <div><strong>Prefixes:</strong> ${stats.totalPrefixes}</div>
+                        <div><strong>Macros:</strong> ${stats.totalMacros}</div>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                    <button class="al-btn al-btn-secondary" id="al-debug-clear-btn">Clear Logs</button>
+                    <button class="al-btn al-btn-secondary" id="al-debug-export-btn">Export Logs</button>
+                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                        <input type="checkbox" id="al-debug-autoscroll" ${settings.debugAutoScroll !== false ? 'checked' : ''}>
+                        <span>Auto-scroll</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                        <input type="checkbox" id="al-debug-wrap" ${settings.debugWrap ? 'checked' : ''}>
+                        <span>Wrap text</span>
+                    </label>
+                    <div style="margin-left: auto;">
+                        <span style="color: #999; font-size: 12px;">${debugLogs.length} entries</span>
+                    </div>
+                </div>
+
+                <!-- Log Display -->
+                <div id="al-debug-log-container" style="
+                    background: #1a1a1a;
+                    border: 1px solid #333;
+                    border-radius: 4px;
+                    height: 400px;
+                    overflow-y: auto;
+                    font-family: 'Courier New', monospace;
+                    font-size: 11px;
+                    padding: 8px;
+                    white-space: ${settings.debugWrap ? 'pre-wrap' : 'pre'};
+                    word-break: ${settings.debugWrap ? 'break-word' : 'normal'};
+                ">
+                    ${debugLogs.length === 0 ? '<div style="color: #666; padding: 20px; text-align: center;">No log entries yet</div>' :
+                      debugLogs.map(log => {
+                        const colors = {
+                            log: '#e0e0e0',
+                            warn: '#ffaa00',
+                            error: '#ff4444',
+                            system: '#00aaff',
+                            rules: '#00ff88',
+                            capture: '#ff88ff',
+                            ui: '#88aaff',
+                            bwc: '#ffaa88',
+                            x10: '#88ffaa'
+                        };
+                        const color = colors[log.level] || colors.log;
+                        const time = new Date(log.timestamp).toLocaleTimeString();
+                        return `<div style="margin-bottom: 4px; color: ${color};">[${time}] [${log.level.toUpperCase()}] ${log.message}</div>`;
+                    }).join('')}
+                </div>
+
+                <!-- Category Filter (for future enhancement) -->
+                <div style="margin-top: 10px; font-size: 11px; color: #666;">
+                    Categories: system, rules, capture, ui, bwc, x10
+                </div>
+            `;
+
+            // Event handlers
+            const clearBtn = document.getElementById('al-debug-clear-btn');
+            const exportBtn = document.getElementById('al-debug-export-btn');
+            const autoScrollCheckbox = document.getElementById('al-debug-autoscroll');
+            const wrapCheckbox = document.getElementById('al-debug-wrap');
+
+            clearBtn.onclick = () => {
+                this.debugLogs = [];
+                this.renderDebug(content);
+            };
+
+            exportBtn.onclick = () => {
+                const dataStr = JSON.stringify(this.debugLogs, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `ocsd-debug-${Date.now()}.json`;
+                link.click();
+                URL.revokeObjectURL(url);
+                this.showToast('Export Complete', 'Debug logs exported', 'success');
+            };
+
+            autoScrollCheckbox.onchange = (e) => {
+                settings.debugAutoScroll = e.target.checked;
+                AL.persistence.set('settings', settings);
+                if (e.target.checked) {
+                    const container = document.getElementById('al-debug-log-container');
+                    if (container) container.scrollTop = container.scrollHeight;
+                }
+            };
+
+            wrapCheckbox.onchange = (e) => {
+                settings.debugWrap = e.target.checked;
+                AL.persistence.set('settings', settings);
+                const container = document.getElementById('al-debug-log-container');
+                if (container) {
+                    container.style.whiteSpace = e.target.checked ? 'pre-wrap' : 'pre';
+                    container.style.wordBreak = e.target.checked ? 'break-word' : 'normal';
+                }
+            };
+
+            // Auto-scroll to bottom if enabled
+            if (settings.debugAutoScroll !== false) {
+                setTimeout(() => {
+                    const container = document.getElementById('al-debug-log-container');
+                    if (container) container.scrollTop = container.scrollHeight;
+                }, 50);
+            }
         },
 
         /**
