@@ -1678,11 +1678,23 @@
                 const ctx = AL.pageState?.getActiveTabContext();
                 if (!ctx) return;
 
-                // Build asset parts (only weapon, taser, and patrol pills)
+                // Build asset parts (ONLY pill values from weapon, taser, and patrol fields)
                 const assetParts = [];
-                if (ctx.weapon) assetParts.push(ctx.weapon);
-                if (ctx.taser) assetParts.push(ctx.taser);
-                if (ctx.patrol) assetParts.push(ctx.patrol);
+
+                // Add weapon pills
+                if (ctx.weaponPills && ctx.weaponPills.length > 0) {
+                    assetParts.push(...ctx.weaponPills);
+                }
+
+                // Add taser pills
+                if (ctx.taserPills && ctx.taserPills.length > 0) {
+                    assetParts.push(...ctx.taserPills);
+                }
+
+                // Add patrol pills
+                if (ctx.patrolPills && ctx.patrolPills.length > 0) {
+                    assetParts.push(...ctx.patrolPills);
+                }
 
                 // Get prefix text if active
                 const prefixText = AL.prefixes.activePrefix ?
@@ -4228,6 +4240,9 @@
                 weapon: null,
                 taser: null,
                 patrol: null,
+                weaponPills: [],    // Array of pill values for weapon field
+                taserPills: [],     // Array of pill values for taser field
+                patrolPills: [],    // Array of pill values for patrol field
                 controlOneRadio: null,
                 updatedOn: null,
                 lastTabLabel: '⚫ | Unknown',
@@ -4357,6 +4372,53 @@
         },
 
         /**
+         * Read pill values from a multi-select field
+         * Returns an array of pill text values
+         */
+        readPillValues(fieldKey) {
+            const element = this.findVisibleField(fieldKey);
+            if (!element) return [];
+
+            try {
+                // Find the parent container that holds the pills
+                // Pills are typically in a container near the input
+                const container = element.closest('.form-field') || element.closest('[data-field-name]') || element.parentElement;
+                if (!container) return [];
+
+                // Search for pill elements in the container
+                // ServiceNow uses various pill patterns - try multiple selectors
+                const pillSelectors = [
+                    '.sn-tag-button .sn-tag-label',  // Standard ServiceNow pills
+                    '.now-tag .now-tag-label',        // Now Experience pills
+                    '[role="button"][class*="tag"] span',  // Generic tag buttons
+                    '.token span',                     // Token-based pills
+                    '[data-value]'                     // Elements with data-value attribute
+                ];
+
+                const pillValues = [];
+
+                for (const selector of pillSelectors) {
+                    const pills = AL.utils.querySelectorAllDeep(selector, container);
+                    if (pills.length > 0) {
+                        pills.forEach(pill => {
+                            const text = pill.textContent?.trim();
+                            if (text && !text.includes('×') && !text.includes('✕')) {
+                                // Filter out close button text
+                                pillValues.push(text);
+                            }
+                        });
+                        if (pillValues.length > 0) break; // Found pills, stop searching
+                    }
+                }
+
+                return pillValues;
+            } catch (error) {
+                console.log('[pageState] Error reading pill values:', fieldKey, error);
+                return [];
+            }
+        },
+
+        /**
          * Read fields and update the provided context
          *
          * ⚠️ CRITICAL: This function MUST store lastTabLabel in the context
@@ -4374,22 +4436,29 @@
                 const typeValue = this.readFieldValue('type');
                 const userValue = this.readFieldValue('user');
                 const vehicleValue = this.readFieldValue('vehicle');
-                const weaponValue = this.readFieldValue('weapon');
-                const taserValue = this.readFieldValue('taser');
-                const patrolValue = this.readFieldValue('patrol');
                 const controlOneRadioValue = this.readFieldValue('controlOneRadio');
                 const updatedOnValue = this.readFieldValue('updated_on');
+
+                // Read ONLY pill values for weapon, taser, and patrol (multi-select fields)
+                const weaponPills = this.readPillValues('weapon');
+                const taserPills = this.readPillValues('taser');
+                const patrolPills = this.readPillValues('patrol');
 
                 // Update context
                 ctx.type = typeValue;
                 ctx.userFull = userValue;
                 ctx.userLast = this.extractLastName(userValue);
                 ctx.vehicle = vehicleValue;
-                ctx.weapon = weaponValue;
-                ctx.taser = taserValue;
-                ctx.patrol = patrolValue;
+                ctx.weaponPills = weaponPills;  // Array of pill values
+                ctx.taserPills = taserPills;    // Array of pill values
+                ctx.patrolPills = patrolPills;  // Array of pill values
                 ctx.controlOneRadio = controlOneRadioValue;
                 ctx.updatedOn = updatedOnValue;
+
+                // Also store legacy single-value versions for backward compatibility
+                ctx.weapon = this.readFieldValue('weapon');
+                ctx.taser = this.readFieldValue('taser');
+                ctx.patrol = this.readFieldValue('patrol');
 
                 // Set type icon
                 if (typeValue) {
