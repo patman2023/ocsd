@@ -1332,6 +1332,29 @@
                     --z-panel: 999995;
                     --z-modal: 999999;
                     --z-toast: 1000001;
+
+                    /* Default theme colors (dark theme as fallback) */
+                    --bg-primary: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+                    --bg-secondary: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+                    --bg-elevated: rgba(30, 41, 59, 0.95);
+                    --bg-overlay: rgba(15, 23, 42, 0.8);
+                    --bg-hover: rgba(56, 189, 248, 0.05);
+                    --bg-active: rgba(56, 189, 248, 0.1);
+                    --text-primary: #f1f5f9;
+                    --text-secondary: #cbd5e1;
+                    --text-tertiary: #64748b;
+                    --text-disabled: #475569;
+                    --accent-primary: #38bdf8;
+                    --accent-success: #34d399;
+                    --accent-warning: #fbbf24;
+                    --accent-danger: #f87171;
+                    --accent-info: #22d3ee;
+                    --border-light: rgba(148, 163, 184, 0.1);
+                    --border-medium: rgba(148, 163, 184, 0.2);
+                    --border-heavy: rgba(148, 163, 184, 0.3);
+                    --glass-bg: rgba(15, 23, 42, 0.6);
+                    --glass-border: rgba(148, 163, 184, 0.2);
+                    --backdrop-blur: blur(12px);
                 }
 
                 /* ============================================
@@ -2484,6 +2507,7 @@
         loadTheme() {
             const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
             const savedTheme = settings.theme || 'dark';  // Default to dark for backward compatibility
+            console.log('[ui] loadTheme: Loading saved theme:', savedTheme);
             this.setTheme(savedTheme, false);  // Don't save on load
         },
 
@@ -2492,17 +2516,23 @@
          */
         setTheme(theme, save = true) {
             const validThemes = ['light', 'dark', 'high-contrast', 'ocsd-sheriff'];
+            console.log('[ui] setTheme called with:', theme, 'save:', save);
+
             if (!validThemes.includes(theme)) {
+                console.warn('[ui] Invalid theme:', theme, 'defaulting to dark');
                 theme = 'dark';
             }
 
+            // Set the theme attribute on the document element
             document.documentElement.setAttribute('data-al-theme', theme);
+            console.log('[ui] Set data-al-theme attribute to:', theme);
+            console.log('[ui] Computed style test:', getComputedStyle(document.documentElement).getPropertyValue('--text-primary'));
 
             if (save) {
                 const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
                 settings.theme = theme;
                 AL.persistence.set('settings', settings);
-                console.log('[ui] Theme changed to:', theme);
+                console.log('[ui] Theme saved to settings:', theme);
             }
 
             // Update theme selectors if they exist
@@ -2701,17 +2731,21 @@
             document.getElementById('al-close').onclick = () => this.togglePanel();
             document.getElementById('al-minimize').onclick = () => this.togglePanel();
 
-            // Theme selector
+            // Theme selector in header
             const themeSelector = document.getElementById('al-theme-selector');
             if (themeSelector) {
                 // Set current theme
                 const currentTheme = settings.theme || 'dark';
                 themeSelector.value = currentTheme;
+                console.log('[ui] Header theme selector initialized with theme:', currentTheme);
 
                 // Listen for changes
                 themeSelector.addEventListener('change', (e) => {
+                    console.log('[ui] Header theme selector changed to:', e.target.value);
                     this.setTheme(e.target.value);
                 });
+            } else {
+                console.error('[ui] Could not find header theme selector (#al-theme-selector)');
             }
 
             // Dock toggle button
@@ -4027,9 +4061,13 @@
             // Theme selector - apply theme immediately and save
             const settingsThemeSelector = document.getElementById('al-settings-theme-selector');
             if (settingsThemeSelector) {
+                console.log('[ui] Settings theme selector found, attaching event listener');
                 settingsThemeSelector.onchange = (e) => {
+                    console.log('[ui] Settings theme selector changed to:', e.target.value);
                     AL.ui.setTheme(e.target.value, true);
                 };
+            } else {
+                console.warn('[ui] Settings theme selector not found (#al-settings-theme-selector)');
             }
 
             // Layout settings - auto-save on change
