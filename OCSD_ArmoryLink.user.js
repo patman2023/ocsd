@@ -896,6 +896,300 @@
             this.panel = document.getElementById('al-panel');
             this.ticker = document.getElementById('al-ticker');
             this.content = document.getElementById('al-content');
+        },
+
+        /**
+         * Get field element by key
+         * Uses pageState to find visible field on active subpage
+         */
+        async getField(key) {
+            const fieldConfig = AL.fields.getField(key);
+            if (!fieldConfig || !fieldConfig.enabled) {
+                console.warn('[elements] Field not found or disabled:', key);
+                return null;
+            }
+
+            const element = AL.pageState?.findVisibleField(key);
+            if (!element) {
+                console.warn('[elements] Element not found or not visible for field:', key);
+                return null;
+            }
+
+            return element;
+        },
+
+        /**
+         * Wait for reference field dropdown option to appear
+         * @param {HTMLElement} field - The reference input field
+         * @param {Function} matcher - Function that returns true for the desired option
+         * @param {Object} options - { timeout: milliseconds }
+         * @returns {Promise<HTMLElement>} The matching option element
+         */
+        async waitForReferenceOption(field, matcher, options = {}) {
+            const timeout = options.timeout || 5000;
+            const startTime = Date.now();
+
+            console.log('[elements] Waiting for reference option...');
+
+            return new Promise((resolve, reject) => {
+                const checkInterval = setInterval(() => {
+                    // Check if timeout exceeded
+                    if (Date.now() - startTime > timeout) {
+                        clearInterval(checkInterval);
+                        console.warn('[elements] Timeout waiting for reference option');
+                        resolve(null);
+                        return;
+                    }
+
+                    // Find options in shadow DOM or regular DOM
+                    const options = AL.utils.querySelectorAllDeep('[role="option"]');
+
+                    if (options && options.length > 0) {
+                        // Try to find matching option
+                        const matchingOption = Array.from(options).find(opt => {
+                            try {
+                                return matcher(opt);
+                            } catch (error) {
+                                console.error('[elements] Error in matcher function:', error);
+                                return false;
+                            }
+                        });
+
+                        if (matchingOption) {
+                            clearInterval(checkInterval);
+                            console.log('[elements] Found matching reference option');
+                            resolve(matchingOption);
+                        }
+                    }
+                }, 100); // Check every 100ms
+            });
+        },
+
+        /**
+         * Wait for reference field to be fully selected
+         * @param {HTMLElement} field - The reference input field
+         * @param {Object} criteria - { pid: string } - criteria to verify selection
+         * @returns {Promise<boolean>} True if selection completed successfully
+         */
+        async waitForReferenceSelection(field, criteria = {}) {
+            const timeout = 3000;
+            const startTime = Date.now();
+
+            console.log('[elements] Waiting for reference selection to complete...');
+
+            return new Promise((resolve) => {
+                const checkInterval = setInterval(() => {
+                    // Check if timeout exceeded
+                    if (Date.now() - startTime > timeout) {
+                        clearInterval(checkInterval);
+                        console.warn('[elements] Timeout waiting for reference selection');
+                        resolve(false);
+                        return;
+                    }
+
+                    // Check if field has a value (display value)
+                    const fieldValue = field.value?.trim();
+
+                    if (fieldValue && fieldValue.length > 0) {
+                        // If PID criteria provided, check if it's included
+                        if (criteria.pid) {
+                            if (fieldValue.includes(criteria.pid)) {
+                                clearInterval(checkInterval);
+                                console.log('[elements] Reference selection completed:', fieldValue);
+                                resolve(true);
+                                return;
+                            }
+                        } else {
+                            // No specific criteria, just check field is populated
+                            clearInterval(checkInterval);
+                            console.log('[elements] Reference selection completed:', fieldValue);
+                            resolve(true);
+                            return;
+                        }
+                    }
+                }, 100); // Check every 100ms
+            });
+        },
+
+        /**
+         * Set User field from PID with full async workflow
+         * Handles ServiceNow reference/typeahead field properly:
+         * 1. Type PID
+         * 2. Wait for dropdown
+         * 3. Click matching option
+         * 4. Wait for selection to complete
+         * 5. Commit & verify
+         * @param {string} pid - The personnel ID to set
+         * @returns {Promise<boolean>} True if successful
+         */
+        async setAndCommitUserFromPid(pid) {
+            console.log('[elements] Setting User field from PID:', pid);
+
+            // 1) Get the User field
+            const field = await this.getField('user');
+            if (!field) {
+                console.error('[elements] User field not found');
+                AL.ui.showToast('Error', 'User field not found', 'error');
+                return false;
+            }
+
+            // 2) Type the PID into the reference input and fire events
+            field.value = pid;
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+            field.dispatchEvent(new Event('change', { bubbles: true }));
+
+            console.log('[elements] Typed PID into User field, waiting for dropdown...');
+
+            // 3) Wait for the suggestion list to appear and populate
+            const option = await this.waitForReferenceOption(field, (opt) => {
+                const txt = opt.textContent || '';
+                // Match either PID or name – prefer PID
+                return txt.includes(pid);
+            }, { timeout: 5000 });
+
+            if (!option) {
+                console.warn('[elements] No reference suggestion found for PID:', pid);
+                AL.ui.showToast('Warning', `No user found for ${pid}`, 'warning');
+                return false;
+            }
+
+            console.log('[elements] Found matching option, clicking...');
+
+            // 4) Click the option to let ServiceNow do its reference selection
+            option.click();
+
+            // 5) Wait until the User field is actually populated with the selected name
+            const selectionComplete = await this.waitForReferenceSelection(field, { pid });
+
+            if (!selectionComplete) {
+                console.warn('[elements] Reference selection did not complete in time');
+                AL.ui.showToast('Warning', 'User selection may not be complete', 'warning');
+                return false;
+            }
+
+            console.log('[elements] User field selection complete');
+
+            // 6) Commit the field (dispatch final change event)
+            field.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Small delay to let ServiceNow process
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // 7) Verify the field has a value
+            const finalValue = field.value?.trim();
+            if (!finalValue || finalValue.length === 0) {
+                console.error('[elements] User field is empty after selection');
+                return false;
+            }
+
+            console.log('[elements] User field successfully set to:', finalValue);
+            AL.ui.showToast('Success', `User set: ${finalValue}`, 'success');
+            return true;
+        },
+
+        /**
+         * Set Vehicle field from asset number with full async workflow
+         * Handles ServiceNow reference/typeahead field properly:
+         * 1. Type asset number
+         * 2. Wait for dropdown
+         * 3. Click matching option
+         * 4. Wait for selection to complete
+         * 5. Commit & verify
+         * @param {string} asset - The vehicle asset number to set
+         * @returns {Promise<boolean>} True if successful
+         */
+        async setAndCommitVehicleFromAsset(asset) {
+            console.log('[elements] Setting Vehicle field from asset:', asset);
+
+            // 1) Get the Vehicle field
+            const field = await this.getField('vehicle');
+            if (!field) {
+                console.error('[elements] Vehicle field not found');
+                AL.ui.showToast('Error', 'Vehicle field not found', 'error');
+                return false;
+            }
+
+            // 2) Type the asset number into the reference input and fire events
+            field.value = asset;
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+            field.dispatchEvent(new Event('change', { bubbles: true }));
+
+            console.log('[elements] Typed asset into Vehicle field, waiting for dropdown...');
+
+            // 3) Wait for the suggestion list to appear and populate
+            const option = await this.waitForReferenceOption(field, (opt) => {
+                const txt = opt.textContent || '';
+                // Match either asset number or vehicle description
+                return txt.includes(asset);
+            }, { timeout: 5000 });
+
+            if (!option) {
+                console.warn('[elements] No reference suggestion found for vehicle asset:', asset);
+                AL.ui.showToast('Warning', `No vehicle found for ${asset}`, 'warning');
+                return false;
+            }
+
+            console.log('[elements] Found matching vehicle option, clicking...');
+
+            // 4) Click the option to let ServiceNow do its reference selection
+            option.click();
+
+            // 5) Wait until the Vehicle field is actually populated with the selected vehicle
+            const selectionComplete = await this.waitForReferenceSelection(field, { pid: asset });
+
+            if (!selectionComplete) {
+                console.warn('[elements] Vehicle selection did not complete in time');
+                AL.ui.showToast('Warning', 'Vehicle selection may not be complete', 'warning');
+                return false;
+            }
+
+            console.log('[elements] Vehicle field selection complete');
+
+            // 6) Commit the field (dispatch final change event)
+            field.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Small delay to let ServiceNow process
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // 7) Verify the field has a value
+            const finalValue = field.value?.trim();
+            if (!finalValue || finalValue.length === 0) {
+                console.error('[elements] Vehicle field is empty after selection');
+                return false;
+            }
+
+            console.log('[elements] Vehicle field successfully set to:', finalValue);
+            AL.ui.showToast('Success', `Vehicle set: ${finalValue}`, 'success');
+            return true;
+        },
+
+        /**
+         * Generic set and commit for non-reference fields
+         * @param {string} key - Field key
+         * @param {string} value - Value to set
+         * @returns {Promise<boolean>} True if successful
+         */
+        async setAndCommit(key, value) {
+            console.log('[elements] Setting field:', key, 'to:', value);
+
+            const field = await this.getField(key);
+            if (!field) {
+                console.error('[elements] Field not found:', key);
+                return false;
+            }
+
+            // Set value
+            field.value = value;
+
+            // Dispatch events
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+            field.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Small delay to let ServiceNow process
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            console.log('[elements] Field set successfully:', key);
+            return true;
         }
     };
 
@@ -1055,10 +1349,21 @@
 
             switch (action.type) {
                 case 'setField':
-                    AL.fields.setFieldValue(action.field, action.value);
+                    // Special handling for reference/typeahead fields
+                    if (action.field === 'user') {
+                        console.log('[rules] Using async helper for User field');
+                        await AL.elements.setAndCommitUserFromPid(action.value);
+                    } else if (action.field === 'vehicle') {
+                        console.log('[rules] Using async helper for Vehicle field');
+                        await AL.elements.setAndCommitVehicleFromAsset(action.value);
+                    } else {
+                        // Use async helper for other fields
+                        await AL.elements.setAndCommit(action.field, action.value);
+                    }
                     break;
 
                 case 'setType':
+                    // Type field still uses old method (has special dropdown handling)
                     AL.fields.setFieldValue('type', action.value);
                     break;
 
@@ -1276,224 +1581,1036 @@
          */
         injectStyles() {
             GM_addStyle(`
-                /* Main Panel */
+                /* ============================================
+                   MODERN DESIGN SYSTEM - 2024 Update
+                   ============================================ */
+
+                /* Import modern font */
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+                /* CSS Reset for ArmoryLink components */
+                #al-panel, #al-panel * {
+                    box-sizing: border-box;
+                }
+
+                /* ============================================
+                   ROOT VARIABLES - MODERN DESIGN TOKENS
+                   ============================================ */
+                :root {
+                    /* Modern spacing scale (8px base) */
+                    --space-xs: 4px;
+                    --space-sm: 8px;
+                    --space-md: 16px;
+                    --space-lg: 24px;
+                    --space-xl: 32px;
+                    --space-2xl: 48px;
+
+                    /* Modern typography scale */
+                    --font-xs: 11px;
+                    --font-sm: 13px;
+                    --font-md: 14px;
+                    --font-lg: 16px;
+                    --font-xl: 20px;
+                    --font-2xl: 24px;
+
+                    /* Modern border radius */
+                    --radius-sm: 6px;
+                    --radius-md: 10px;
+                    --radius-lg: 14px;
+                    --radius-xl: 20px;
+                    --radius-pill: 100px;
+
+                    /* Modern shadows */
+                    --shadow-sm: 0 2px 4px rgba(0,0,0,0.06);
+                    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+                    --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+                    --shadow-xl: 0 16px 48px rgba(0,0,0,0.16);
+                    --shadow-glow: 0 0 40px rgba(59, 130, 246, 0.15);
+
+                    /* Animation curves */
+                    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+                    --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
+                    --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+                    /* Z-index layers */
+                    --z-base: 999990;
+                    --z-panel: 999995;
+                    --z-modal: 999999;
+                    --z-toast: 1000001;
+
+                    /* Default theme colors (dark theme as fallback) */
+                    --bg-primary: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+                    --bg-secondary: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+                    --bg-elevated: rgba(30, 41, 59, 0.95);
+                    --bg-overlay: rgba(15, 23, 42, 0.8);
+                    --bg-hover: rgba(56, 189, 248, 0.05);
+                    --bg-active: rgba(56, 189, 248, 0.1);
+                    --text-primary: #f1f5f9;
+                    --text-secondary: #cbd5e1;
+                    --text-tertiary: #64748b;
+                    --text-disabled: #475569;
+                    --accent-primary: #38bdf8;
+                    --accent-success: #34d399;
+                    --accent-warning: #fbbf24;
+                    --accent-danger: #f87171;
+                    --accent-info: #22d3ee;
+                    --border-light: rgba(148, 163, 184, 0.1);
+                    --border-medium: rgba(148, 163, 184, 0.2);
+                    --border-heavy: rgba(148, 163, 184, 0.3);
+                    --glass-bg: rgba(15, 23, 42, 0.6);
+                    --glass-border: rgba(148, 163, 184, 0.2);
+                    --backdrop-blur: blur(12px);
+                }
+
+                /* ============================================
+                   LIGHT THEME - MODERN PALETTE
+                   ============================================ */
+                [data-al-theme="light"] {
+                    /* Backgrounds with subtle gradients */
+                    --bg-primary: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+                    --bg-secondary: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+                    --bg-elevated: rgba(255, 255, 255, 0.95);
+                    --bg-overlay: rgba(248, 250, 252, 0.8);
+                    --bg-hover: rgba(59, 130, 246, 0.04);
+                    --bg-active: rgba(59, 130, 246, 0.08);
+
+                    /* Modern text colors */
+                    --text-primary: #0f172a;
+                    --text-secondary: #475569;
+                    --text-tertiary: #94a3b8;
+                    --text-disabled: #cbd5e1;
+
+                    /* Modern accent colors */
+                    --accent-primary: #3b82f6;
+                    --accent-success: #10b981;
+                    --accent-warning: #f59e0b;
+                    --accent-danger: #ef4444;
+                    --accent-info: #06b6d4;
+
+                    /* Borders */
+                    --border-light: rgba(148, 163, 184, 0.15);
+                    --border-medium: rgba(148, 163, 184, 0.3);
+                    --border-heavy: rgba(148, 163, 184, 0.5);
+
+                    /* Glass morphism */
+                    --glass-bg: rgba(255, 255, 255, 0.7);
+                    --glass-border: rgba(255, 255, 255, 0.5);
+                    --backdrop-blur: blur(10px);
+                }
+
+                /* ============================================
+                   DARK THEME - MODERN PALETTE
+                   ============================================ */
+                [data-al-theme="dark"] {
+                    /* Rich dark backgrounds */
+                    --bg-primary: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+                    --bg-secondary: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+                    --bg-elevated: rgba(30, 41, 59, 0.95);
+                    --bg-overlay: rgba(15, 23, 42, 0.8);
+                    --bg-hover: rgba(56, 189, 248, 0.05);
+                    --bg-active: rgba(56, 189, 248, 0.1);
+
+                    /* Dark mode text */
+                    --text-primary: #f1f5f9;
+                    --text-secondary: #cbd5e1;
+                    --text-tertiary: #64748b;
+                    --text-disabled: #475569;
+
+                    /* Vibrant accents for dark mode */
+                    --accent-primary: #38bdf8;
+                    --accent-success: #34d399;
+                    --accent-warning: #fbbf24;
+                    --accent-danger: #f87171;
+                    --accent-info: #22d3ee;
+
+                    /* Borders */
+                    --border-light: rgba(148, 163, 184, 0.1);
+                    --border-medium: rgba(148, 163, 184, 0.2);
+                    --border-heavy: rgba(148, 163, 184, 0.3);
+
+                    /* Glass morphism */
+                    --glass-bg: rgba(15, 23, 42, 0.6);
+                    --glass-border: rgba(148, 163, 184, 0.2);
+                    --backdrop-blur: blur(12px);
+                }
+
+                /* ============================================
+                   HIGH CONTRAST - ACCESSIBILITY FOCUSED
+                   ============================================ */
+                [data-al-theme="high-contrast"] {
+                    --bg-primary: #000000;
+                    --bg-secondary: #ffffff;
+                    --bg-elevated: #000000;
+                    --bg-overlay: #000000;
+                    --bg-hover: #ffffff;
+                    --bg-active: #ffffff;
+
+                    --text-primary: #ffffff;
+                    --text-secondary: #ffffff;
+                    --text-tertiary: #cccccc;
+                    --text-disabled: #666666;
+
+                    --accent-primary: #00ffff;
+                    --accent-success: #00ff00;
+                    --accent-warning: #ffff00;
+                    --accent-danger: #ff0000;
+                    --accent-info: #00ffff;
+
+                    --border-light: #ffffff;
+                    --border-medium: #ffffff;
+                    --border-heavy: #ffffff;
+
+                    --glass-bg: #000000;
+                    --glass-border: #ffffff;
+                    --backdrop-blur: none;
+                }
+
+                /* ============================================
+                   OCSD SHERIFF - OFFICIAL THEME
+                   ============================================ */
+                [data-al-theme="ocsd-sheriff"] {
+                    /* Tactical gradients */
+                    --bg-primary: linear-gradient(135deg, #0a0a0a 0%, #1c1c1c 100%);
+                    --bg-secondary: linear-gradient(135deg, #0b3b2e 0%, #0d4a3a 100%);
+                    --bg-elevated: rgba(11, 59, 46, 0.95);
+                    --bg-overlay: rgba(10, 10, 10, 0.85);
+                    --bg-hover: rgba(201, 162, 39, 0.08);
+                    --bg-active: rgba(201, 162, 39, 0.15);
+
+                    /* Gold and green text */
+                    --text-primary: #dcc48e;
+                    --text-secondary: #c9a227;
+                    --text-tertiary: #8b7932;
+                    --text-disabled: #5a5a5a;
+
+                    /* Official colors */
+                    --accent-primary: #c9a227;
+                    --accent-success: #0b3b2e;
+                    --accent-warning: #dcc48e;
+                    --accent-danger: #dc2626;
+                    --accent-info: #0b3b2e;
+
+                    /* Gold borders */
+                    --border-light: rgba(201, 162, 39, 0.2);
+                    --border-medium: rgba(201, 162, 39, 0.4);
+                    --border-heavy: rgba(201, 162, 39, 0.6);
+
+                    /* Tactical glass */
+                    --glass-bg: rgba(11, 59, 46, 0.4);
+                    --glass-border: rgba(201, 162, 39, 0.3);
+                    --backdrop-blur: blur(8px);
+                }
+
+                /* ============================================
+                   MAIN PANEL - MODERN GLASS MORPHISM
+                   ============================================ */
                 #al-panel {
+                    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                    background: var(--glass-bg);
+                    backdrop-filter: var(--backdrop-blur);
+                    -webkit-backdrop-filter: var(--backdrop-blur);
+                    border: 1px solid var(--glass-border);
+                    border-radius: var(--radius-xl);
+                    box-shadow:
+                        var(--shadow-xl),
+                        inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+                    color: var(--text-primary);
+                    font-size: var(--font-md);
+                    line-height: 1.5;
+                    animation: panelSlideIn 0.4s var(--ease-out);
+                    overflow: hidden;
                     position: fixed;
-                    background: #1e1e1e;
-                    color: #e0e0e0;
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                    font-size: 13px;
-                    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-                    z-index: 999999;
+                    z-index: var(--z-panel);
                     display: flex;
                     flex-direction: column;
-                    border: 1px solid #333;
                 }
+
+                /* Panel inner glow effect */
+                #al-panel::before {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    height: 1px;
+                    background: linear-gradient(90deg,
+                        transparent,
+                        rgba(255, 255, 255, 0.2),
+                        transparent
+                    );
+                    pointer-events: none;
+                }
+
+                /* Docked panel adjustments */
+                #al-panel.dock-left,
+                #al-panel.dock-right {
+                    border-radius: 0;
+                    height: 100vh !important;
+                }
+
+                /* ============================================
+                   DOCK MODES - MODERN POSITIONING
+                   ============================================ */
                 #al-panel.dock-left {
                     left: 0;
                     top: 0;
                     bottom: var(--ticker-height, 30px);
                     width: 400px;
+                    border-left: none;
+                    animation: slideInLeft 0.4s var(--ease-out);
                 }
+
                 #al-panel.dock-right {
                     right: 0;
                     top: 0;
                     bottom: var(--ticker-height, 30px);
                     width: 400px;
+                    border-right: none;
+                    animation: slideInRight 0.4s var(--ease-out);
                 }
+
                 #al-panel.dock-bottom {
                     left: 0;
                     right: 0;
                     bottom: var(--ticker-height, 30px);
                     height: 300px;
+                    border-bottom: none;
+                    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+                    animation: slideInBottom 0.4s var(--ease-out);
                 }
+
                 #al-panel.float {
                     top: 100px;
                     right: 100px;
                     width: 400px;
                     height: 600px;
                     resize: both;
-                    overflow: auto;
+                    animation: panelFloat 0.5s var(--spring);
                 }
 
-                /* Panel Header */
-                #al-header {
-                    background: #2a2a2a;
-                    padding: 10px;
+                /* ============================================
+                   PANEL HEADER - MODERN GRADIENT
+                   ============================================ */
+                #al-header,
+                .al-header {
+                    background: var(--bg-secondary);
+                    padding: var(--space-md) var(--space-lg);
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
-                    border-bottom: 1px solid #444;
+                    border-bottom: 1px solid var(--border-medium);
+                    backdrop-filter: var(--backdrop-blur);
+                    -webkit-backdrop-filter: var(--backdrop-blur);
+                    position: relative;
                 }
-                #al-header h3 {
+
+                #al-header::after,
+                .al-header::after {
+                    content: '';
+                    position: absolute;
+                    bottom: -1px;
+                    left: 0;
+                    right: 0;
+                    height: 1px;
+                    background: linear-gradient(90deg,
+                        transparent,
+                        var(--accent-primary) 50%,
+                        transparent
+                    );
+                    opacity: 0.3;
+                }
+
+                #al-header h3,
+                .al-header h3 {
                     margin: 0;
-                    font-size: 14px;
+                    font-size: var(--font-lg);
+                    font-weight: 600;
+                    color: var(--text-primary);
+                    letter-spacing: -0.02em;
+                }
+
+                /* Header action buttons */
+                #al-header button,
+                .al-header button {
+                    background: transparent;
+                    border: 1px solid var(--border-light);
+                    color: var(--text-secondary);
+                    padding: var(--space-xs) var(--space-sm);
+                    border-radius: var(--radius-sm);
+                    cursor: pointer;
+                    font-size: var(--font-sm);
+                    transition: all 0.2s var(--ease-out);
+                }
+
+                #al-header button:hover,
+                .al-header button:hover {
+                    background: var(--bg-hover);
+                    border-color: var(--border-medium);
+                    color: var(--text-primary);
+                    transform: translateY(-1px);
+                }
+
+                #al-header button:active,
+                .al-header button:active {
+                    transform: translateY(0);
+                }
+
+                /* ============================================
+                   TAB NAVIGATION - MODERN PILLS
+                   ============================================ */
+                #al-tabs {
+                    display: flex;
+                    gap: var(--space-xs);
+                    background: var(--bg-secondary);
+                    border-bottom: 1px solid var(--border-light);
+                    padding: var(--space-sm) var(--space-md);
+                    overflow-x: auto;
+                    scrollbar-width: none;
+                    -ms-overflow-style: none;
+                }
+
+                #al-tabs::-webkit-scrollbar {
+                    display: none;
+                }
+
+                #al-tabs button,
+                .al-tab {
+                    background: transparent;
+                    border: none;
+                    color: var(--text-secondary);
+                    padding: var(--space-sm) var(--space-md);
+                    border-radius: var(--radius-md);
+                    cursor: pointer;
+                    font-size: var(--font-sm);
+                    font-weight: 500;
+                    white-space: nowrap;
+                    transition: all 0.2s var(--ease-out);
+                    position: relative;
+                }
+
+                #al-tabs button:hover,
+                .al-tab:hover {
+                    background: var(--bg-hover);
+                    color: var(--text-primary);
+                }
+
+                #al-tabs button.active,
+                .al-tab.active {
+                    background: var(--accent-primary);
+                    color: white;
+                    box-shadow: var(--shadow-sm), 0 0 0 3px rgba(59, 130, 246, 0.1);
                     font-weight: 600;
                 }
 
-                /* Tabs */
-                #al-tabs {
-                    display: flex;
-                    background: #252525;
-                    border-bottom: 1px solid #444;
-                    overflow-x: auto;
-                    padding: 0;
-                    margin: 0;
-                    /* Hide scrollbar while keeping scroll functionality */
-                    scrollbar-width: none; /* Firefox */
-                    -ms-overflow-style: none; /* IE and Edge */
-                }
-                #al-tabs::-webkit-scrollbar {
-                    display: none; /* Chrome, Safari, Opera */
-                }
-                #al-tabs button {
-                    background: transparent;
-                    border: none;
-                    color: #999;
-                    padding: 8px 12px;
-                    cursor: pointer;
-                    font-size: 12px;
-                    white-space: nowrap;
-                    border-bottom: 2px solid transparent;
-                }
-                #al-tabs button:hover {
-                    background: #2a2a2a;
-                    color: #e0e0e0;
-                }
-                #al-tabs button.active {
-                    color: #4CAF50;
-                    border-bottom-color: #4CAF50;
+                #al-tabs button.active::before,
+                .al-tab.active::before {
+                    content: '';
+                    position: absolute;
+                    inset: -2px;
+                    border-radius: var(--radius-md);
+                    background: linear-gradient(135deg, var(--accent-primary), var(--accent-info));
+                    opacity: 0.1;
+                    z-index: -1;
                 }
 
-                /* Tab Content */
+                /* ============================================
+                   CONTENT AREA - SMOOTH SCROLLING
+                   ============================================ */
                 #al-content {
                     flex: 1;
                     overflow-y: auto;
-                    padding: 15px;
-                    /* Hide scrollbar while keeping scroll functionality */
-                    scrollbar-width: none; /* Firefox */
-                    -ms-overflow-style: none; /* IE and Edge */
-                }
-                #al-content::-webkit-scrollbar {
-                    display: none; /* Chrome, Safari, Opera */
+                    padding: var(--space-lg);
+                    background: var(--bg-primary);
+                    scrollbar-width: thin;
+                    scrollbar-color: var(--border-medium) transparent;
                 }
 
-                /* Ticker */
+                #al-content::-webkit-scrollbar {
+                    width: 8px;
+                }
+
+                #al-content::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+
+                #al-content::-webkit-scrollbar-thumb {
+                    background: var(--border-medium);
+                    border-radius: var(--radius-pill);
+                    border: 2px solid transparent;
+                    background-clip: padding-box;
+                }
+
+                #al-content::-webkit-scrollbar-thumb:hover {
+                    background: var(--border-heavy);
+                    background-clip: padding-box;
+                }
+
+                /* ============================================
+                   TICKER - MODERN STATUS BAR
+                   ============================================ */
                 #al-ticker {
                     position: fixed;
                     bottom: 0;
                     left: 0;
                     right: 0;
-                    background: #2a2a2a;
-                    color: #e0e0e0;
-                    padding: var(--ticker-padding, 8px 12px);
-                    font-size: var(--ticker-font-size, 13px);
+                    background: var(--glass-bg);
+                    backdrop-filter: var(--backdrop-blur);
+                    -webkit-backdrop-filter: var(--backdrop-blur);
+                    color: var(--text-primary);
+                    padding: var(--ticker-padding, var(--space-sm) var(--space-md));
+                    font-size: var(--ticker-font-size, var(--font-sm));
                     min-height: var(--ticker-height, 30px);
                     max-height: 80px;
                     box-sizing: border-box;
-                    z-index: 1000000;
-                    border-top: 1px solid #444;
+                    z-index: var(--z-toast);
+                    border-top: 1px solid var(--border-light);
                     display: flex;
                     justify-content: flex-start;
                     align-items: center;
-                    gap: 20px;
+                    gap: var(--space-lg);
                     white-space: normal;
                     word-wrap: break-word;
                     overflow-y: auto;
                     flex-wrap: wrap;
+                    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
                 }
 
                 .al-ticker-status-dot {
-                    width: 12px;
-                    height: 12px;
+                    width: 10px;
+                    height: 10px;
                     border-radius: 50%;
                     display: inline-block;
-                    margin-right: 8px;
+                    margin-right: var(--space-sm);
+                    position: relative;
+                    animation: pulse 2s ease-in-out infinite;
+                }
+
+                .al-ticker-status-dot::before {
+                    content: '';
+                    position: absolute;
+                    inset: -3px;
+                    border-radius: 50%;
+                    background: inherit;
+                    opacity: 0.3;
+                    animation: ripple 2s ease-in-out infinite;
                 }
 
                 .al-ticker-status-dot.mode-on {
-                    background: #4CAF50;
-                    box-shadow: 0 0 8px #4CAF50;
+                    background: var(--accent-success);
+                    box-shadow: 0 0 12px var(--accent-success);
                 }
 
                 .al-ticker-status-dot.mode-standby {
-                    background: #ff9800;
-                    box-shadow: 0 0 8px #ff9800;
+                    background: var(--accent-warning);
+                    box-shadow: 0 0 12px var(--accent-warning);
                 }
 
                 .al-ticker-status-dot.mode-off {
-                    background: #f44336;
-                    box-shadow: 0 0 8px #f44336;
+                    background: var(--accent-danger);
+                    box-shadow: 0 0 12px var(--accent-danger);
                 }
 
-                /* Toast */
-                .al-toast {
+                /* ============================================
+                   TOAST NOTIFICATIONS - MODERN ALERTS
+                   ============================================ */
+                #al-toast-container {
                     position: fixed;
-                    background: #333;
-                    color: #fff;
-                    padding: 12px 16px;
-                    border-radius: 4px;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-                    z-index: 1000000;
-                    min-width: 200px;
-                    max-width: 400px;
-                    animation: al-toast-in 0.3s ease;
+                    top: var(--space-lg);
+                    right: var(--space-lg);
+                    z-index: var(--z-toast);
+                    pointer-events: none;
+                    display: flex;
+                    flex-direction: column;
+                    gap: var(--space-sm);
                 }
+
+                .al-toast {
+                    background: var(--glass-bg);
+                    backdrop-filter: var(--backdrop-blur);
+                    -webkit-backdrop-filter: var(--backdrop-blur);
+                    border: 1px solid var(--glass-border);
+                    color: var(--text-primary);
+                    padding: var(--space-md) var(--space-lg);
+                    border-radius: var(--radius-lg);
+                    box-shadow: var(--shadow-lg);
+                    min-width: 250px;
+                    max-width: 400px;
+                    pointer-events: auto;
+                    cursor: pointer;
+                    opacity: 0;
+                    transform: translateX(100px) scale(0.9);
+                    animation: toastSlideIn 0.4s var(--spring) forwards;
+                    position: relative;
+                    overflow: hidden;
+                }
+
+                .al-toast::before {
+                    content: '';
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    bottom: 0;
+                    width: 4px;
+                    background: var(--accent-primary);
+                }
+
+                .al-toast.al-toast-show {
+                    opacity: 1;
+                    transform: translateX(0) scale(1);
+                }
+
+                .al-toast.success,
+                .al-toast-success {
+                    border-color: var(--accent-success);
+                }
+
+                .al-toast.success::before,
+                .al-toast-success::before {
+                    background: var(--accent-success);
+                }
+
+                .al-toast.error,
+                .al-toast-error {
+                    border-color: var(--accent-danger);
+                }
+
+                .al-toast.error::before,
+                .al-toast-error::before {
+                    background: var(--accent-danger);
+                }
+
+                .al-toast.warning,
+                .al-toast-warning {
+                    border-color: var(--accent-warning);
+                }
+
+                .al-toast.warning::before,
+                .al-toast-warning::before {
+                    background: var(--accent-warning);
+                }
+
+                .al-toast.info,
+                .al-toast-info {
+                    border-color: var(--accent-info);
+                }
+
+                .al-toast.info::before,
+                .al-toast-info::before {
+                    background: var(--accent-info);
+                }
+
+                /* Toast positioning variants */
                 .al-toast.top-right { top: 20px; right: 20px; }
                 .al-toast.top-left { top: 20px; left: 20px; }
                 .al-toast.bottom-right { bottom: 20px; right: 20px; }
                 .al-toast.bottom-left { bottom: 20px; left: 20px; }
-                .al-toast.top-center { top: 20px; left: 50%; transform: translateX(-50%); }
-                .al-toast.bottom-center { bottom: 20px; left: 50%; transform: translateX(-50%); }
-                .al-toast.success { background: #4CAF50; }
-                .al-toast.error { background: #f44336; }
-                .al-toast.warning { background: #ff9800; }
-                .al-toast.info { background: #2196F3; }
-                @keyframes al-toast-in {
-                    from { opacity: 0; transform: translateY(-20px); }
-                    to { opacity: 1; transform: translateY(0); }
+                .al-toast.top-center {
+                    top: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                }
+                .al-toast.bottom-center {
+                    bottom: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
                 }
 
-                /* Buttons */
+                /* ============================================
+                   BUTTONS - MODERN WITH MICRO-INTERACTIONS
+                   ============================================ */
                 .al-btn {
-                    background: #4CAF50;
+                    background: var(--accent-primary);
                     color: white;
                     border: none;
-                    padding: 8px 16px;
-                    border-radius: 4px;
+                    padding: var(--space-sm) var(--space-lg);
+                    border-radius: var(--radius-md);
                     cursor: pointer;
-                    font-size: 13px;
-                }
-                .al-btn:hover {
-                    background: #45a049;
-                }
-                .al-btn-secondary {
-                    background: #555;
-                }
-                .al-btn-secondary:hover {
-                    background: #666;
-                }
-                .al-btn-danger {
-                    background: #f44336;
-                }
-                .al-btn-danger:hover {
-                    background: #da190b;
+                    font-size: var(--font-sm);
+                    font-weight: 500;
+                    transition: all 0.2s var(--ease-out);
+                    box-shadow: var(--shadow-sm);
+                    position: relative;
+                    overflow: hidden;
                 }
 
-                /* Inputs */
-                .al-input {
-                    background: #2a2a2a;
-                    color: #e0e0e0;
-                    border: 1px solid #444;
-                    padding: 8px;
-                    border-radius: 4px;
-                    font-size: 13px;
+                .al-btn::before {
+                    content: '';
+                    position: absolute;
+                    inset: 0;
+                    background: linear-gradient(135deg, rgba(255,255,255,0.2), transparent);
+                    opacity: 0;
+                    transition: opacity 0.2s;
+                }
+
+                .al-btn:hover {
+                    transform: translateY(-2px);
+                    box-shadow: var(--shadow-md);
+                }
+
+                .al-btn:hover::before {
+                    opacity: 1;
+                }
+
+                .al-btn:active {
+                    transform: translateY(0);
+                    box-shadow: var(--shadow-sm);
+                }
+
+                .al-btn-primary {
+                    background: var(--accent-primary);
+                }
+
+                .al-btn-secondary {
+                    background: var(--bg-secondary);
+                    color: var(--text-primary);
+                    border: 1px solid var(--border-medium);
+                }
+
+                .al-btn-secondary:hover {
+                    background: var(--bg-hover);
+                    border-color: var(--border-heavy);
+                }
+
+                .al-btn-danger {
+                    background: var(--accent-danger);
+                }
+
+                .al-btn-success {
+                    background: var(--accent-success);
+                }
+
+                .al-btn-warning {
+                    background: var(--accent-warning);
+                }
+
+                /* ============================================
+                   INPUTS - MODERN FORM CONTROLS
+                   ============================================ */
+                .al-input,
+                .al-select,
+                .al-textarea,
+                input[type="text"],
+                input[type="number"],
+                input[type="email"],
+                input[type="password"],
+                select,
+                textarea {
+                    background: var(--bg-elevated);
+                    color: var(--text-primary);
+                    border: 1px solid var(--border-light);
+                    padding: var(--space-sm) var(--space-md);
+                    border-radius: var(--radius-md);
+                    font-size: var(--font-sm);
+                    font-family: inherit;
                     width: 100%;
                     box-sizing: border-box;
+                    transition: all 0.2s var(--ease-out);
                 }
-                .al-input:focus {
+
+                .al-input:focus,
+                .al-select:focus,
+                .al-textarea:focus,
+                input:focus,
+                select:focus,
+                textarea:focus {
                     outline: none;
-                    border-color: #4CAF50;
+                    border-color: var(--accent-primary);
+                    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+                }
+
+                .al-input:hover,
+                .al-select:hover,
+                .al-textarea:hover,
+                input:hover,
+                select:hover,
+                textarea:hover {
+                    border-color: var(--border-medium);
+                }
+
+                /* Checkbox styling */
+                .al-checkbox {
+                    appearance: none;
+                    width: 18px;
+                    height: 18px;
+                    border: 2px solid var(--border-medium);
+                    border-radius: var(--radius-sm);
+                    cursor: pointer;
+                    position: relative;
+                    transition: all 0.2s var(--ease-out);
+                }
+
+                .al-checkbox:checked {
+                    background: var(--accent-primary);
+                    border-color: var(--accent-primary);
+                }
+
+                .al-checkbox:checked::after {
+                    content: '✓';
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    color: white;
+                    font-size: 12px;
+                    font-weight: bold;
+                }
+
+                .al-checkbox-group {
+                    display: flex;
+                    align-items: center;
+                    gap: var(--space-sm);
+                }
+
+                /* ============================================
+                   CARDS - MODERN CONTAINERS
+                   ============================================ */
+                .al-card {
+                    background: var(--bg-elevated);
+                    border: 1px solid var(--border-light);
+                    border-radius: var(--radius-lg);
+                    padding: var(--space-lg);
+                    box-shadow: var(--shadow-sm);
+                    transition: all 0.3s var(--ease-out);
+                }
+
+                .al-card:hover {
+                    box-shadow: var(--shadow-md);
+                    transform: translateY(-2px);
+                }
+
+                .al-action-item {
+                    background: var(--bg-secondary);
+                    padding: var(--space-md);
+                    margin-bottom: var(--space-sm);
+                    border-radius: var(--radius-md);
+                    border-left: 3px solid var(--accent-primary);
+                    transition: all 0.2s var(--ease-out);
+                }
+
+                .al-action-item:hover {
+                    background: var(--bg-hover);
+                    border-left-width: 4px;
+                }
+
+                /* ============================================
+                   MODALS - MODERN DIALOGS
+                   ============================================ */
+                .al-modal-overlay {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0, 0, 0, 0.6);
+                    backdrop-filter: blur(4px);
+                    -webkit-backdrop-filter: blur(4px);
+                    z-index: var(--z-modal);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    animation: fadeIn 0.2s var(--ease-out);
+                    padding: var(--space-lg);
+                }
+
+                .al-modal {
+                    background: var(--glass-bg);
+                    backdrop-filter: var(--backdrop-blur);
+                    -webkit-backdrop-filter: var(--backdrop-blur);
+                    border: 1px solid var(--glass-border);
+                    color: var(--text-primary);
+                    border-radius: var(--radius-xl);
+                    box-shadow: var(--shadow-xl);
+                    max-width: 600px;
+                    width: 100%;
+                    max-height: 90vh;
+                    display: flex;
+                    flex-direction: column;
+                    animation: modalSlideIn 0.3s var(--spring);
+                    overflow: hidden;
+                }
+
+                .al-modal-header {
+                    background: var(--bg-secondary);
+                    padding: var(--space-lg) var(--space-xl);
+                    border-bottom: 1px solid var(--border-light);
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+
+                .al-modal-header h3 {
+                    margin: 0;
+                    font-size: var(--font-xl);
+                    font-weight: 600;
+                    color: var(--text-primary);
+                }
+
+                .al-modal-body {
+                    padding: var(--space-xl);
+                    overflow-y: auto;
+                    flex: 1;
+                }
+
+                .al-modal-footer {
+                    background: var(--bg-secondary);
+                    padding: var(--space-lg) var(--space-xl);
+                    border-top: 1px solid var(--border-light);
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: var(--space-md);
+                }
+
+                .al-form-group {
+                    margin-bottom: var(--space-lg);
+                }
+
+                .al-form-group label {
+                    display: block;
+                    margin-bottom: var(--space-sm);
+                    font-weight: 500;
+                    font-size: var(--font-sm);
+                    color: var(--text-primary);
+                }
+
+                .al-form-group small {
+                    display: block;
+                    color: var(--text-tertiary);
+                    font-size: var(--font-xs);
+                    margin-top: var(--space-xs);
+                }
+
+                /* ============================================
+                   RESIZE HANDLES - INTERACTIVE CONTROLS
+                   ============================================ */
+                .al-resize-handle {
+                    position: absolute;
+                    z-index: var(--z-panel);
+                    background: var(--accent-primary);
+                    opacity: 0;
+                    transition: opacity 0.2s var(--ease-out);
+                }
+
+                .al-resize-handle:hover {
+                    opacity: 0.5;
+                }
+
+                #al-panel:hover .al-resize-handle {
+                    opacity: 0.2;
+                }
+
+                .al-resize-handle.left,
+                .al-resize-handle.right {
+                    top: var(--space-md);
+                    bottom: var(--space-md);
+                    width: 4px;
+                    cursor: ew-resize;
+                }
+
+                .al-resize-handle.left {
+                    left: 0;
+                    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+                }
+
+                .al-resize-handle.right {
+                    right: 0;
+                    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+                }
+
+                .al-resize-handle.top,
+                .al-resize-handle.bottom {
+                    left: var(--space-md);
+                    right: var(--space-md);
+                    height: 4px;
+                    cursor: ns-resize;
+                }
+
+                .al-resize-handle.top {
+                    top: 0;
+                    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+                }
+
+                .al-resize-handle.bottom {
+                    bottom: 0;
+                    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+                }
+
+                .al-resize-handle.top-left,
+                .al-resize-handle.top-right,
+                .al-resize-handle.bottom-left,
+                .al-resize-handle.bottom-right {
+                    width: 12px;
+                    height: 12px;
+                    border-radius: 50%;
+                }
+
+                .al-resize-handle.top-left {
+                    top: 0;
+                    left: 0;
+                    cursor: nwse-resize;
+                }
+
+                .al-resize-handle.top-right {
+                    top: 0;
+                    right: 0;
+                    cursor: nesw-resize;
+                }
+
+                .al-resize-handle.bottom-left {
+                    bottom: 0;
+                    left: 0;
+                    cursor: nesw-resize;
+                }
+
+                .al-resize-handle.bottom-right {
+                    bottom: 0;
+                    right: 0;
+                    cursor: nwse-resize;
+                }
+
+                /* ============================================
+                   BUBBLE LAUNCHER - FLOATING ACTION
+                   ============================================ */
+                #al-bubble {
+                    position: fixed;
+                    bottom: var(--space-2xl);
+                    right: var(--space-2xl);
+                    width: 64px;
+                    height: 64px;
+                    background: linear-gradient(135deg, var(--accent-primary), var(--accent-info));
+                    border-radius: 50%;
+                    box-shadow: var(--shadow-xl), var(--shadow-glow);
+                    z-index: var(--z-panel);
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 28px;
+                    color: white;
+                    transition: all 0.3s var(--spring);
+                    border: 3px solid rgba(255, 255, 255, 0.2);
+                }
+
+                #al-bubble::before {
+                    content: '';
+                    position: absolute;
+                    inset: -4px;
+                    border-radius: 50%;
+                    background: inherit;
+                    opacity: 0;
+                    animation: ripple 2s ease-in-out infinite;
+                }
+
+                #al-bubble:hover {
+                    transform: scale(1.15) rotate(5deg);
+                    box-shadow: var(--shadow-xl), 0 0 60px rgba(59, 130, 246, 0.4);
+                }
+
+                #al-bubble:hover::before {
+                    opacity: 0.3;
+                }
+
+                #al-bubble:active {
+                    transform: scale(0.95);
                 }
 
                 /* Strip Launcher */
@@ -1502,519 +2619,189 @@
                     left: 0;
                     top: 50%;
                     transform: translateY(-50%);
-                    background: #2a2a2a;
-                    padding: 8px 4px;
-                    border-radius: 0 8px 8px 0;
-                    box-shadow: 2px 0 10px rgba(0,0,0,0.3);
-                    z-index: 999999;
+                    background: var(--glass-bg);
+                    backdrop-filter: var(--backdrop-blur);
+                    -webkit-backdrop-filter: var(--backdrop-blur);
+                    padding: var(--space-md) var(--space-sm);
+                    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+                    box-shadow: var(--shadow-lg);
+                    z-index: var(--z-panel);
                     cursor: pointer;
                     writing-mode: vertical-rl;
-                    font-size: 12px;
-                    color: #4CAF50;
+                    font-size: var(--font-sm);
+                    font-weight: 600;
+                    color: var(--accent-primary);
+                    border: 1px solid var(--border-light);
+                    border-left: none;
+                    transition: all 0.3s var(--ease-out);
                 }
 
-                /* Resize Handles */
-                .al-resize-handle {
-                    position: absolute;
-                    z-index: 999999;
-                }
-                .al-resize-handle.left {
-                    left: 0;
-                    top: 10px;
-                    bottom: 10px;
-                    width: 4px;
-                    cursor: ew-resize;
-                }
-                .al-resize-handle.right {
-                    right: 0;
-                    top: 10px;
-                    bottom: 10px;
-                    width: 4px;
-                    cursor: ew-resize;
-                }
-                .al-resize-handle.top {
-                    top: 0;
-                    left: 10px;
-                    right: 10px;
-                    height: 4px;
-                    cursor: ns-resize;
-                }
-                .al-resize-handle.bottom {
-                    bottom: 0;
-                    left: 10px;
-                    right: 10px;
-                    height: 4px;
-                    cursor: ns-resize;
-                }
-                .al-resize-handle.top-left {
-                    top: 0;
-                    left: 0;
-                    width: 10px;
-                    height: 10px;
-                    cursor: nwse-resize;
-                }
-                .al-resize-handle.top-right {
-                    top: 0;
-                    right: 0;
-                    width: 10px;
-                    height: 10px;
-                    cursor: nesw-resize;
-                }
-                .al-resize-handle.bottom-left {
-                    bottom: 0;
-                    left: 0;
-                    width: 10px;
-                    height: 10px;
-                    cursor: nesw-resize;
-                }
-                .al-resize-handle.bottom-right {
-                    bottom: 0;
-                    right: 0;
-                    width: 10px;
-                    height: 10px;
-                    cursor: nwse-resize;
+                #al-strip:hover {
+                    padding-right: var(--space-md);
+                    box-shadow: var(--shadow-xl);
                 }
 
-                /* Bubble Launcher (appears when panel is closed) */
-                #al-bubble {
-                    position: fixed;
-                    bottom: 20px;
-                    right: 20px;
-                    width: 60px;
-                    height: 60px;
-                    background: #4CAF50;
-                    border-radius: 50%;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                    z-index: 999999;
-                    cursor: pointer;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 28px;
-                    color: white;
-                    transition: all 0.3s ease;
-                }
-                #al-bubble:hover {
-                    transform: scale(1.1);
-                    box-shadow: 0 6px 16px rgba(0,0,0,0.4);
-                }
-                #al-bubble:active {
-                    transform: scale(0.95);
+                /* ============================================
+                   ANIMATIONS - MODERN MOTION
+                   ============================================ */
+                @keyframes panelSlideIn {
+                    from {
+                        opacity: 0;
+                        transform: translateY(20px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
                 }
 
-                /* Modal Overlay */
-                .al-modal-overlay {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background: rgba(0,0,0,0.7);
-                    z-index: 1000000;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    animation: al-fade-in 0.2s ease;
+                @keyframes slideInLeft {
+                    from {
+                        opacity: 0;
+                        transform: translateX(-100%);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateX(0);
+                    }
                 }
 
-                /* Modal Dialog */
-                .al-modal {
-                    background: #1e1e1e;
-                    color: #e0e0e0;
-                    border-radius: 8px;
-                    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
-                    max-width: 600px;
-                    width: 90%;
-                    max-height: 90vh;
-                    display: flex;
-                    flex-direction: column;
-                    animation: al-modal-in 0.3s ease;
+                @keyframes slideInRight {
+                    from {
+                        opacity: 0;
+                        transform: translateX(100%);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateX(0);
+                    }
                 }
 
-                .al-modal-header {
-                    background: #2a2a2a;
-                    padding: 15px 20px;
-                    border-bottom: 1px solid #444;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
+                @keyframes slideInBottom {
+                    from {
+                        opacity: 0;
+                        transform: translateY(100%);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
                 }
 
-                .al-modal-header h3 {
-                    margin: 0;
-                    font-size: 16px;
+                @keyframes panelFloat {
+                    0% {
+                        opacity: 0;
+                        transform: scale(0.8) translateY(20px);
+                    }
+                    50% {
+                        transform: scale(1.05) translateY(-5px);
+                    }
+                    100% {
+                        opacity: 1;
+                        transform: scale(1) translateY(0);
+                    }
                 }
 
-                .al-modal-body {
-                    padding: 20px;
-                    overflow-y: auto;
-                    flex: 1;
-                }
-
-                .al-modal-footer {
-                    background: #2a2a2a;
-                    padding: 15px 20px;
-                    border-top: 1px solid #444;
-                    display: flex;
-                    justify-content: flex-end;
-                    gap: 10px;
-                }
-
-                .al-form-group {
-                    margin-bottom: 15px;
-                }
-
-                .al-form-group label {
-                    display: block;
-                    margin-bottom: 5px;
-                    font-weight: 500;
-                    font-size: 13px;
-                }
-
-                .al-form-group small {
-                    display: block;
-                    color: #999;
-                    font-size: 11px;
-                    margin-top: 3px;
-                }
-
-                .al-checkbox-group {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                }
-
-                .al-action-item {
-                    background: #2a2a2a;
-                    padding: 10px;
-                    margin-bottom: 8px;
-                    border-radius: 4px;
-                    border-left: 3px solid #4CAF50;
-                }
-
-                @keyframes al-fade-in {
+                @keyframes fadeIn {
                     from { opacity: 0; }
                     to { opacity: 1; }
                 }
 
-                @keyframes al-modal-in {
-                    from { opacity: 0; transform: scale(0.9); }
-                    to { opacity: 1; transform: scale(1); }
+                @keyframes modalSlideIn {
+                    from {
+                        opacity: 0;
+                        transform: scale(0.9) translateY(-20px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: scale(1) translateY(0);
+                    }
                 }
 
-                /* ========================================
-                 * THEME SYSTEM
-                 * ======================================== */
-
-                /* Light Theme (Default) */
-                :root {
-                    --al-panel-bg: #ffffff;
-                    --al-panel-border: #d1d5db;
-                    --al-tab-bg: #f3f4f6;
-                    --al-tab-active-bg: #3b82f6;
-                    --al-tab-text: #374151;
-                    --al-tab-active-text: #ffffff;
-                    --al-ticker-bg: #f9fafb;
-                    --al-ticker-text: #111827;
-                    --al-ticker-deploy: #fbbf24;
-                    --al-ticker-return: #10b981;
-                    --al-ticker-alert: #ef4444;
-                    --al-toast-bg: #ffffff;
-                    --al-toast-border: #d1d5db;
-                    --al-toast-text: #111827;
-                    --al-text-primary: #111827;
-                    --al-text-secondary: #6b7280;
-                    --al-accent: #3b82f6;
-                    --al-content-bg: #f9fafb;
-                    --al-header-bg: #ffffff;
-                    --al-input-bg: #ffffff;
-                    --al-input-border: #d1d5db;
-                    --al-input-text: #111827;
-                    --al-button-bg: #3b82f6;
-                    --al-button-text: #ffffff;
-                    --al-button-hover-bg: #2563eb;
-                    --al-section-bg: #f3f4f6;
-                    --al-section-border: #e5e7eb;
-                    --al-code-bg: #f3f4f6;
-                    --al-label-text: #374151;
-                    --al-link-color: #3b82f6;
+                @keyframes toastSlideIn {
+                    from {
+                        opacity: 0;
+                        transform: translateX(100px) scale(0.9);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateX(0) scale(1);
+                    }
                 }
 
-                /* Dark Theme */
-                [data-al-theme="dark"] {
-                    --al-panel-bg: #1f2937;
-                    --al-panel-border: #374151;
-                    --al-tab-bg: #111827;
-                    --al-tab-active-bg: #3b82f6;
-                    --al-tab-text: #d1d5db;
-                    --al-tab-active-text: #ffffff;
-                    --al-ticker-bg: #111827;
-                    --al-ticker-text: #f3f4f6;
-                    --al-ticker-deploy: #fbbf24;
-                    --al-ticker-return: #10b981;
-                    --al-ticker-alert: #ef4444;
-                    --al-toast-bg: #374151;
-                    --al-toast-border: #4b5563;
-                    --al-toast-text: #f3f4f6;
-                    --al-text-primary: #f3f4f6;
-                    --al-text-secondary: #9ca3af;
-                    --al-accent: #60a5fa;
-                    --al-content-bg: #1f2937;
-                    --al-header-bg: #111827;
-                    --al-input-bg: #374151;
-                    --al-input-border: #4b5563;
-                    --al-input-text: #f3f4f6;
-                    --al-button-bg: #3b82f6;
-                    --al-button-text: #ffffff;
-                    --al-button-hover-bg: #2563eb;
-                    --al-section-bg: #2a2a2a;
-                    --al-section-border: #374151;
-                    --al-code-bg: #1e1e1e;
-                    --al-label-text: #d1d5db;
-                    --al-link-color: #60a5fa;
+                @keyframes pulse {
+                    0%, 100% {
+                        opacity: 1;
+                    }
+                    50% {
+                        opacity: 0.7;
+                    }
                 }
 
-                /* High Contrast Theme */
-                [data-al-theme="high-contrast"] {
-                    --al-panel-bg: #000000;
-                    --al-panel-border: #ffffff;
-                    --al-tab-bg: #000000;
-                    --al-tab-active-bg: #ffffff;
-                    --al-tab-text: #ffffff;
-                    --al-tab-active-text: #000000;
-                    --al-ticker-bg: #000000;
-                    --al-ticker-text: #ffffff;
-                    --al-ticker-deploy: #ffff00;
-                    --al-ticker-return: #00ff00;
-                    --al-ticker-alert: #ff0000;
-                    --al-toast-bg: #000000;
-                    --al-toast-border: #ffffff;
-                    --al-toast-text: #ffffff;
-                    --al-text-primary: #ffffff;
-                    --al-text-secondary: #ffffff;
-                    --al-accent: #00ffff;
-                    --al-content-bg: #000000;
-                    --al-header-bg: #000000;
-                    --al-input-bg: #000000;
-                    --al-input-border: #ffffff;
-                    --al-input-text: #ffffff;
-                    --al-button-bg: #ffffff;
-                    --al-button-text: #000000;
-                    --al-button-hover-bg: #cccccc;
-                    --al-section-bg: #000000;
-                    --al-section-border: #ffffff;
-                    --al-code-bg: #000000;
-                    --al-label-text: #ffffff;
-                    --al-link-color: #00ffff;
+                @keyframes ripple {
+                    0% {
+                        transform: scale(1);
+                        opacity: 0.3;
+                    }
+                    50% {
+                        transform: scale(1.5);
+                        opacity: 0;
+                    }
+                    100% {
+                        transform: scale(1);
+                        opacity: 0;
+                    }
                 }
 
-                /* OCSD Sheriff Theme */
-                [data-al-theme="ocsd-sheriff"] {
-                    --al-panel-bg: #0a0a0a;
-                    --al-panel-border: #c9a227;
-                    --al-tab-bg: #0b3b2e;
-                    --al-tab-active-bg: linear-gradient(135deg, #c9a227, #dcc48e);
-                    --al-tab-text: #dcc48e;
-                    --al-tab-active-text: #0a0a0a;
-                    --al-ticker-bg: #0b3b2e;
-                    --al-ticker-text: #dcc48e;
-                    --al-ticker-deploy: #c9a227;
-                    --al-ticker-return: #0b3b2e;
-                    --al-ticker-alert: #dc2626;
-                    --al-toast-bg: #1c1c1c;
-                    --al-toast-border: #c9a227;
-                    --al-toast-text: #dcc48e;
-                    --al-text-primary: #dcc48e;
-                    --al-text-secondary: #c9a227;
-                    --al-accent: #c9a227;
-                    --al-content-bg: #0a0a0a;
-                    --al-header-bg: #0b3b2e;
-                    --al-input-bg: #1c1c1c;
-                    --al-input-border: #c9a227;
-                    --al-input-text: #dcc48e;
-                    --al-button-bg: #c9a227;
-                    --al-button-text: #0a0a0a;
-                    --al-button-hover-bg: #b38f1f;
-                    --al-section-bg: #0b3b2e;
-                    --al-section-border: #c9a227;
-                    --al-code-bg: #1c1c1c;
-                    --al-label-text: #dcc48e;
-                    --al-link-color: #c9a227;
+                /* ============================================
+                   RESPONSIVE ADJUSTMENTS
+                   ============================================ */
+                @media (max-width: 768px) {
+                    #al-panel.dock-left,
+                    #al-panel.dock-right {
+                        width: 100%;
+                        left: 0;
+                        right: 0;
+                    }
+
+                    #al-panel.float {
+                        width: calc(100% - var(--space-lg) * 2);
+                        height: calc(100vh - var(--space-lg) * 2);
+                        top: var(--space-lg);
+                        left: var(--space-lg);
+                        right: var(--space-lg);
+                    }
+
+                    #al-bubble {
+                        bottom: var(--space-lg);
+                        right: var(--space-lg);
+                        width: 56px;
+                        height: 56px;
+                        font-size: 24px;
+                    }
+
+                    .al-modal {
+                        max-width: calc(100% - var(--space-lg) * 2);
+                    }
                 }
 
-                /* Apply theme variables to components */
-                #al-panel {
-                    background: var(--al-panel-bg, #1e1e1e) !important;
-                    border-color: var(--al-panel-border, #333) !important;
-                    color: var(--al-text-primary, #e0e0e0) !important;
-                    transition: background 0.3s, border-color 0.3s, color 0.3s;
+                /* ============================================
+                   ACCESSIBILITY ENHANCEMENTS
+                   ============================================ */
+                @media (prefers-reduced-motion: reduce) {
+                    *,
+                    *::before,
+                    *::after {
+                        animation-duration: 0.01ms !important;
+                        animation-iteration-count: 1 !important;
+                        transition-duration: 0.01ms !important;
+                    }
                 }
 
-                #al-header {
-                    background: var(--al-header-bg, #2a2a2a);
-                    color: var(--al-text-primary, #e0e0e0);
-                }
-
-                #al-content {
-                    background: var(--al-content-bg, #1e1e1e);
-                    color: var(--al-text-primary, #e0e0e0);
-                }
-
-                /* Tab buttons - apply theme but preserve original behavior */
-                #al-tabs {
-                    background: var(--al-header-bg, #252525) !important;
-                    border-bottom-color: var(--al-panel-border, #444) !important;
-                }
-
-                #al-tabs button {
-                    color: var(--al-tab-text, #999) !important;
-                }
-
-                #al-tabs button:hover {
-                    background: var(--al-section-bg, #2a2a2a) !important;
-                    color: var(--al-text-primary, #e0e0e0) !important;
-                }
-
-                #al-tabs button.active {
-                    color: var(--al-accent, #4CAF50) !important;
-                    border-bottom-color: var(--al-accent, #4CAF50) !important;
-                }
-
-                #al-ticker {
-                    background: var(--al-ticker-bg, #2a2a2a);
-                    color: var(--al-ticker-text, #e0e0e0);
-                    border-top: 1px solid var(--al-panel-border, #333);
-                }
-
-                .al-toast {
-                    background: var(--al-toast-bg, #ffffff);
-                    border: 1px solid var(--al-toast-border, #d1d5db);
-                    color: var(--al-toast-text, #111827);
-                }
-
-                /* Toast Container */
-                #al-toast-container {
-                    position: fixed;
-                    top: 20px;
-                    right: 20px;
-                    z-index: 1000001;
-                    pointer-events: none;
-                }
-
-                .al-toast {
-                    padding: 12px 16px;
-                    margin-bottom: 10px;
-                    border-radius: 6px;
-                    min-width: 250px;
-                    max-width: 350px;
-                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                    cursor: pointer;
-                    pointer-events: auto;
-                    opacity: 0;
-                    transform: translateX(20px);
-                    transition: all 0.3s ease;
-                }
-
-                .al-toast.al-toast-show {
-                    opacity: 1;
-                    transform: translateX(0);
-                }
-
-                .al-toast-success {
-                    border-color: #10b981 !important;
-                }
-
-                .al-toast-error {
-                    border-color: #ef4444 !important;
-                }
-
-                .al-toast-warning {
-                    border-color: #f59e0b !important;
-                }
-
-                .al-toast-info {
-                    border-color: #3b82f6 !important;
-                }
-
-                /* Apply theme variables to all components */
-
-                /* Buttons */
-                .al-btn {
-                    background: var(--al-button-bg) !important;
-                    color: var(--al-button-text) !important;
-                }
-
-                .al-btn:hover {
-                    background: var(--al-button-hover-bg) !important;
-                }
-
-                .al-btn-secondary {
-                    background: var(--al-section-bg) !important;
-                    color: var(--al-text-primary) !important;
-                    border: 1px solid var(--al-section-border);
-                }
-
-                /* Inputs and Textareas */
-                .al-input, .al-textarea {
-                    background: var(--al-input-bg) !important;
-                    color: var(--al-input-text) !important;
-                    border-color: var(--al-input-border) !important;
-                }
-
-                input[type="text"],
-                input[type="number"],
-                input[type="email"],
-                select,
-                textarea {
-                    background: var(--al-input-bg) !important;
-                    color: var(--al-input-text) !important;
-                    border-color: var(--al-input-border) !important;
-                }
-
-                /* Labels */
-                label,
-                .al-form-group label {
-                    color: var(--al-label-text) !important;
-                }
-
-                /* Form Groups / Sections */
-                .al-form-group,
-                div[style*="background: #2a2a2a"],
-                div[style*="background:#2a2a2a"] {
-                    background: var(--al-section-bg) !important;
-                    border-color: var(--al-section-border) !important;
-                }
-
-                /* Code blocks */
-                div[style*="background: #1e1e1e"],
-                div[style*="background:#1e1e1e"],
-                div[style*="background: #1a1a1a"],
-                div[style*="background:#1a1a1a"],
-                code,
-                pre {
-                    background: var(--al-code-bg) !important;
-                    color: var(--al-text-primary) !important;
-                }
-
-                /* Links */
-                a {
-                    color: var(--al-link-color) !important;
-                }
-
-                /* Small text / descriptions */
-                small {
-                    color: var(--al-text-secondary) !important;
-                }
-
-                /* Settings sections specifically */
-                #al-content > div[style*="background: #2a2a2a"] {
-                    background: var(--al-section-bg) !important;
-                    color: var(--al-text-primary) !important;
-                }
-
-                #al-content > div[style*="background: #2a2a2a"] h4 {
-                    color: var(--al-text-primary) !important;
-                    border-color: var(--al-section-border) !important;
+                /* Focus visible for keyboard navigation */
+                *:focus-visible {
+                    outline: 2px solid var(--accent-primary);
+                    outline-offset: 2px;
                 }
             `);
         },
@@ -2025,6 +2812,7 @@
         loadTheme() {
             const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
             const savedTheme = settings.theme || 'dark';  // Default to dark for backward compatibility
+            console.log('[ui] loadTheme: Loading saved theme:', savedTheme);
             this.setTheme(savedTheme, false);  // Don't save on load
         },
 
@@ -2033,23 +2821,34 @@
          */
         setTheme(theme, save = true) {
             const validThemes = ['light', 'dark', 'high-contrast', 'ocsd-sheriff'];
+            console.log('[ui] setTheme called with:', theme, 'save:', save);
+
             if (!validThemes.includes(theme)) {
+                console.warn('[ui] Invalid theme:', theme, 'defaulting to dark');
                 theme = 'dark';
             }
 
+            // Set the theme attribute on the document element
             document.documentElement.setAttribute('data-al-theme', theme);
+            console.log('[ui] Set data-al-theme attribute to:', theme);
+            console.log('[ui] Computed style test:', getComputedStyle(document.documentElement).getPropertyValue('--text-primary'));
 
             if (save) {
                 const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
                 settings.theme = theme;
                 AL.persistence.set('settings', settings);
-                console.log('[ui] Theme changed to:', theme);
+                console.log('[ui] Theme saved to settings:', theme);
             }
 
-            // Update theme selector if it exists
-            const selector = document.getElementById('al-theme-selector');
-            if (selector && selector.value !== theme) {
-                selector.value = theme;
+            // Update theme selectors if they exist
+            const headerSelector = document.getElementById('al-theme-selector');
+            if (headerSelector && headerSelector.value !== theme) {
+                headerSelector.value = theme;
+            }
+
+            const settingsSelector = document.getElementById('al-settings-theme-selector');
+            if (settingsSelector && settingsSelector.value !== theme) {
+                settingsSelector.value = theme;
             }
 
             // Add smooth transition when theme changes
@@ -2059,6 +2858,36 @@
                     this.panel.style.transition = '';
                 }, 300);
             }
+        },
+
+        /**
+         * Cycle through dock modes
+         */
+        cycleDockMode() {
+            const modes = ['dock-right', 'dock-left', 'dock-bottom', 'float'];
+            const currentIndex = modes.indexOf(this.dockMode);
+            const nextIndex = (currentIndex + 1) % modes.length;
+            const nextMode = modes[nextIndex];
+
+            // Save new dock mode
+            const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
+            settings.dockMode = nextMode;
+            AL.persistence.set('settings', settings);
+
+            // Update UI
+            this.dockMode = nextMode;
+            this.panel.className = nextMode;
+
+            // Show toast notification
+            const modeLabels = {
+                'dock-right': 'Docked Right',
+                'dock-left': 'Docked Left',
+                'dock-bottom': 'Docked Bottom',
+                'float': 'Floating'
+            };
+            AL.ui.showToast('Dock Mode', `Panel is now ${modeLabels[nextMode]}`, 'info');
+
+            console.log('[ui] Dock mode changed to:', nextMode);
         },
 
         /**
@@ -2160,27 +2989,51 @@
                 this.panel.style.top = `${settings.topGapRight || 0}px`;
             }
 
-            // Header
+            // Modern Header
             const header = document.createElement('div');
             header.id = 'al-header';
+            header.className = 'al-header';
             header.innerHTML = `
-                <h3>OCSD ArmoryLink</h3>
-                <div>
-                    <button class="al-btn al-btn-secondary" id="al-minimize">−</button>
-                    <button class="al-btn al-btn-secondary" id="al-close">×</button>
+                <h2>OCSD ArmoryLink</h2>
+                <div class="al-header-controls">
+                    <select id="al-theme-selector" class="al-input al-select" style="width: 140px; padding: 6px 32px 6px 10px; margin: 0;">
+                        <option value="light">☀️ Light</option>
+                        <option value="dark">🌙 Dark</option>
+                        <option value="high-contrast">♿ High Contrast</option>
+                        <option value="ocsd-sheriff">⭐ Sheriff</option>
+                    </select>
+                    <button class="al-btn-icon" id="al-minimize" title="Minimize">−</button>
+                    <button class="al-btn-icon" id="al-dock-toggle" title="Toggle Dock">⇄</button>
+                    <button class="al-btn-icon" id="al-close" title="Close">×</button>
                 </div>
             `;
             this.panel.appendChild(header);
 
-            // Tabs
+            // Setup theme selector event listener immediately after header is created
+            const headerThemeSelector = header.querySelector('#al-theme-selector');
+            if (headerThemeSelector) {
+                const currentTheme = settings.theme || 'dark';
+                headerThemeSelector.value = currentTheme;
+                console.log('[ui] Header theme selector found and initialized with theme:', currentTheme);
+
+                headerThemeSelector.addEventListener('change', (e) => {
+                    console.log('[ui] Header theme selector changed to:', e.target.value);
+                    this.setTheme(e.target.value);
+                });
+            } else {
+                console.error('[ui] Header theme selector not found in header element!');
+            }
+
+            // Modern Tabs
             const tabs = document.createElement('div');
             tabs.id = 'al-tabs';
+            tabs.className = 'al-tabs';
             const tabNames = ['dashboard', 'rules', 'fields', 'prefixes', 'macros', 'favorites', 'bwc', 'x10', 'batch', 'history', 'settings', 'debug'];
             tabNames.forEach(name => {
-                const btn = document.createElement('button');
+                const btn = document.createElement('div');
+                btn.className = 'al-tab' + (name === this.currentTab ? ' active' : '');
                 btn.textContent = name.charAt(0).toUpperCase() + name.slice(1);
                 btn.dataset.tab = name;
-                if (name === this.currentTab) btn.className = 'active';
                 btn.onclick = () => this.switchTab(name);
                 tabs.appendChild(btn);
             });
@@ -2197,6 +3050,12 @@
             // Event listeners
             document.getElementById('al-close').onclick = () => this.togglePanel();
             document.getElementById('al-minimize').onclick = () => this.togglePanel();
+
+            // Dock toggle button
+            const dockToggle = document.getElementById('al-dock-toggle');
+            if (dockToggle) {
+                dockToggle.onclick = () => this.cycleDockMode();
+            }
 
             // Drag functionality for docked → floating conversion
             this.initDragBehavior(header);
@@ -2710,10 +3569,10 @@
         switchTab(tabName) {
             this.currentTab = tabName;
 
-            // Update active button
-            const tabs = document.querySelectorAll('#al-tabs button');
-            tabs.forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.tab === tabName);
+            // Update active tab
+            const tabs = document.querySelectorAll('#al-tabs .al-tab');
+            tabs.forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.tab === tabName);
             });
 
             // Render tab content
@@ -3304,7 +4163,7 @@
 
                     <div class="al-form-group">
                         <label>Color Theme</label>
-                        <select class="al-input" id="al-theme-selector">
+                        <select class="al-input" id="al-settings-theme-selector">
                             <option value="light" ${(settings.theme || 'dark') === 'light' ? 'selected' : ''}>Light</option>
                             <option value="dark" ${(settings.theme || 'dark') === 'dark' ? 'selected' : ''}>Dark</option>
                             <option value="high-contrast" ${(settings.theme || 'dark') === 'high-contrast' ? 'selected' : ''}>High Contrast</option>
@@ -3503,9 +4362,16 @@
             };
 
             // Theme selector - apply theme immediately and save
-            document.getElementById('al-theme-selector').onchange = (e) => {
-                AL.ui.setTheme(e.target.value, true);
-            };
+            const settingsThemeSelector = document.getElementById('al-settings-theme-selector');
+            if (settingsThemeSelector) {
+                console.log('[ui] Settings theme selector found, attaching event listener');
+                settingsThemeSelector.onchange = (e) => {
+                    console.log('[ui] Settings theme selector changed to:', e.target.value);
+                    AL.ui.setTheme(e.target.value, true);
+                };
+            } else {
+                console.warn('[ui] Settings theme selector not found (#al-settings-theme-selector)');
+            }
 
             // Layout settings - auto-save on change
             document.getElementById('al-setting-dock-mode').onchange = autoSave;
@@ -6755,6 +7621,18 @@
             }
 
             try {
+                // Reference fields should NOT be set through this method anymore
+                // Use AL.elements async helpers instead for proper workflow
+                if (key === 'user') {
+                    console.warn('[fields] User field should be set using AL.elements.setAndCommitUserFromPid() for proper async workflow');
+                    return false;
+                }
+
+                if (key === 'vehicle') {
+                    console.warn('[fields] Vehicle field should be set using AL.elements.setAndCommitVehicleFromAsset() for proper async workflow');
+                    return false;
+                }
+
                 // Special handling for Type field (combobox in shadow DOM)
                 if (key === 'type' && element.getAttribute('role') === 'combobox') {
                     // Click to open dropdown
@@ -6788,21 +7666,20 @@
                     );
                     if (option) {
                         element.value = option.value;
+                        // Dispatch change event for select elements
+                        element.dispatchEvent(new Event('change', { bubbles: true }));
                     } else {
                         console.warn('[fields] Option not found in select:', value);
                         return false;
                     }
                 } else if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
                     element.value = value;
+                    // Dispatch both input and change events for ServiceNow validation
+                    element.dispatchEvent(new Event('input', { bubbles: true }));
+                    element.dispatchEvent(new Event('change', { bubbles: true }));
                 } else {
                     // Generic fallback
                     element.textContent = value;
-                }
-
-                // Trigger commit event
-                if (field.commitEvent && field.commitEvent !== 'none') {
-                    const event = new Event(field.commitEvent, { bubbles: true });
-                    element.dispatchEvent(event);
                 }
 
                 console.log('[fields] Set field', key, 'to:', value);
