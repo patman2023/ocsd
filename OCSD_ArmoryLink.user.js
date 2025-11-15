@@ -5333,7 +5333,7 @@
                 <div class="al-modal" onclick="event.stopPropagation()">
                     <div class="al-modal-header">
                         <h3>${title}</h3>
-                        <button class="al-btn al-btn-secondary" onclick="AL.ui.closeModal()">×</button>
+                        <button class="al-btn al-btn-secondary" id="al-rule-modal-close-x">×</button>
                     </div>
                     <div class="al-modal-body">
                         <div class="al-form-group">
@@ -5392,7 +5392,7 @@
                         </div>
                     </div>
                     <div class="al-modal-footer">
-                        <button class="al-btn al-btn-secondary" onclick="AL.ui.closeModal()">Cancel</button>
+                        <button class="al-btn al-btn-secondary" id="al-rule-modal-cancel">Cancel</button>
                         <button class="al-btn" id="al-save-rule-btn">${isEdit ? 'Update' : 'Add'} Rule</button>
                     </div>
                 </div>
@@ -5402,6 +5402,10 @@
 
             // Close on overlay click
             overlay.onclick = () => this.closeModal();
+
+            // Close button handlers
+            document.getElementById('al-rule-modal-close-x').onclick = () => this.closeModal();
+            document.getElementById('al-rule-modal-cancel').onclick = () => this.closeModal();
 
             // Toggle directive chars visibility
             document.getElementById('al-rule-use-directive').onchange = (e) => {
@@ -5544,7 +5548,7 @@
                 <div class="al-modal" onclick="event.stopPropagation()" style="max-width: 500px;">
                     <div class="al-modal-header">
                         <h3>Add Action</h3>
-                        <button class="al-btn al-btn-secondary" onclick="document.getElementById('al-modal-action-editor').remove()">×</button>
+                        <button class="al-btn al-btn-secondary" id="al-action-modal-close-x">×</button>
                     </div>
                     <div class="al-modal-body">
                         <div class="al-form-group">
@@ -5652,7 +5656,7 @@
                         </div>
                     </div>
                     <div class="al-modal-footer">
-                        <button class="al-btn al-btn-secondary" onclick="document.getElementById('al-modal-action-editor').remove()">Cancel</button>
+                        <button class="al-btn al-btn-secondary" id="al-action-modal-cancel">Cancel</button>
                         <button class="al-btn" id="al-save-action-btn">Add Action</button>
                     </div>
                 </div>
@@ -5662,6 +5666,10 @@
 
             // Close on overlay click
             actionOverlay.onclick = () => actionOverlay.remove();
+
+            // Close button handlers
+            document.getElementById('al-action-modal-close-x').onclick = () => actionOverlay.remove();
+            document.getElementById('al-action-modal-cancel').onclick = () => actionOverlay.remove();
 
             // Show/hide forms based on action type
             document.getElementById('al-action-type').onchange = (e) => {
@@ -5894,7 +5902,7 @@
                 <div class="al-modal" onclick="event.stopPropagation()" style="max-width: 500px;">
                     <div class="al-modal-header">
                         <h3>Edit Action</h3>
-                        <button class="al-btn al-btn-secondary" onclick="document.getElementById('al-modal-action-editor').remove()">×</button>
+                        <button class="al-btn al-btn-secondary" id="al-action-edit-modal-close-x">×</button>
                     </div>
                     <div class="al-modal-body">
                         <div class="al-form-group">
@@ -6002,7 +6010,7 @@
                         </div>
                     </div>
                     <div class="al-modal-footer">
-                        <button class="al-btn al-btn-secondary" onclick="document.getElementById('al-modal-action-editor').remove()">Cancel</button>
+                        <button class="al-btn al-btn-secondary" id="al-action-edit-modal-cancel">Cancel</button>
                         <button class="al-btn" id="al-save-action-btn">Update Action</button>
                     </div>
                 </div>
@@ -6012,6 +6020,10 @@
 
             // Close on overlay click
             actionOverlay.onclick = () => actionOverlay.remove();
+
+            // Close button handlers
+            document.getElementById('al-action-edit-modal-close-x').onclick = () => actionOverlay.remove();
+            document.getElementById('al-action-edit-modal-cancel').onclick = () => actionOverlay.remove();
 
             // Show/hide forms based on action type
             document.getElementById('al-action-type').onchange = (e) => {
