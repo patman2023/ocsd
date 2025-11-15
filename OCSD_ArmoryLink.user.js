@@ -7341,6 +7341,44 @@
                     return true;
                 }
 
+                // Special handling for User field (autocomplete reference field)
+                if (key === 'user' && element.tagName === 'INPUT') {
+                    console.log('[fields] Setting User field with autocomplete handling');
+
+                    // Set the value
+                    element.value = value;
+
+                    // Dispatch input event to trigger autocomplete dropdown
+                    element.dispatchEvent(new Event('input', { bubbles: true }));
+
+                    // Wait for autocomplete dropdown to appear, then find and click the option
+                    setTimeout(() => {
+                        // Find the autocomplete options (could be in shadow DOM or regular DOM)
+                        const options = AL.utils.querySelectorAllDeep('[role="option"]');
+                        const matchingOption = Array.from(options).find(opt => {
+                            const text = opt.textContent?.trim();
+                            // Match against the value we're looking for
+                            return text && (text.includes(value) || value.includes(text));
+                        });
+
+                        if (matchingOption) {
+                            matchingOption.click();
+                            console.log('[fields] Selected User from autocomplete:', value);
+
+                            // Dispatch change event after selection
+                            setTimeout(() => {
+                                element.dispatchEvent(new Event('change', { bubbles: true }));
+                            }, 50);
+                        } else {
+                            console.warn('[fields] User option not found in autocomplete for:', value);
+                            // Still dispatch change event even if option not found
+                            element.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    }, 200); // Give autocomplete time to populate
+
+                    return true;
+                }
+
                 // Standard handling for other fields
                 if (element.tagName === 'SELECT') {
                     // Try to find option by value or text
@@ -7349,21 +7387,20 @@
                     );
                     if (option) {
                         element.value = option.value;
+                        // Dispatch change event for select elements
+                        element.dispatchEvent(new Event('change', { bubbles: true }));
                     } else {
                         console.warn('[fields] Option not found in select:', value);
                         return false;
                     }
                 } else if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
                     element.value = value;
+                    // Dispatch both input and change events for ServiceNow validation
+                    element.dispatchEvent(new Event('input', { bubbles: true }));
+                    element.dispatchEvent(new Event('change', { bubbles: true }));
                 } else {
                     // Generic fallback
                     element.textContent = value;
-                }
-
-                // Trigger commit event
-                if (field.commitEvent && field.commitEvent !== 'none') {
-                    const event = new Event(field.commitEvent, { bubbles: true });
-                    element.dispatchEvent(event);
                 }
 
                 console.log('[fields] Set field', key, 'to:', value);
