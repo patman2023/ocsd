@@ -2505,10 +2505,15 @@
                 console.log('[ui] Theme changed to:', theme);
             }
 
-            // Update theme selector if it exists
-            const selector = document.getElementById('al-theme-selector');
-            if (selector && selector.value !== theme) {
-                selector.value = theme;
+            // Update theme selectors if they exist
+            const headerSelector = document.getElementById('al-theme-selector');
+            if (headerSelector && headerSelector.value !== theme) {
+                headerSelector.value = theme;
+            }
+
+            const settingsSelector = document.getElementById('al-settings-theme-selector');
+            if (settingsSelector && settingsSelector.value !== theme) {
+                settingsSelector.value = theme;
             }
 
             // Add smooth transition when theme changes
@@ -3821,7 +3826,7 @@
 
                     <div class="al-form-group">
                         <label>Color Theme</label>
-                        <select class="al-input" id="al-theme-selector">
+                        <select class="al-input" id="al-settings-theme-selector">
                             <option value="light" ${(settings.theme || 'dark') === 'light' ? 'selected' : ''}>Light</option>
                             <option value="dark" ${(settings.theme || 'dark') === 'dark' ? 'selected' : ''}>Dark</option>
                             <option value="high-contrast" ${(settings.theme || 'dark') === 'high-contrast' ? 'selected' : ''}>High Contrast</option>
@@ -4020,9 +4025,12 @@
             };
 
             // Theme selector - apply theme immediately and save
-            document.getElementById('al-theme-selector').onchange = (e) => {
-                AL.ui.setTheme(e.target.value, true);
-            };
+            const settingsThemeSelector = document.getElementById('al-settings-theme-selector');
+            if (settingsThemeSelector) {
+                settingsThemeSelector.onchange = (e) => {
+                    AL.ui.setTheme(e.target.value, true);
+                };
+            }
 
             // Layout settings - auto-save on change
             document.getElementById('al-setting-dock-mode').onchange = autoSave;
