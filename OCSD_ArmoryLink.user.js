@@ -1854,14 +1854,24 @@
                     color: var(--al-text-primary, #e0e0e0);
                 }
 
-                .al-tab {
-                    background: var(--al-tab-bg, #2a2a2a);
-                    color: var(--al-tab-text, #888);
+                /* Tab buttons - apply theme but preserve original behavior */
+                #al-tabs {
+                    background: var(--al-header-bg, #252525) !important;
+                    border-bottom-color: var(--al-panel-border, #444) !important;
                 }
 
-                .al-tab.active {
-                    background: var(--al-tab-active-bg, #3b82f6);
-                    color: var(--al-tab-active-text, #fff);
+                #al-tabs button {
+                    color: var(--al-tab-text, #999) !important;
+                }
+
+                #al-tabs button:hover {
+                    background: var(--al-section-bg, #2a2a2a) !important;
+                    color: var(--al-text-primary, #e0e0e0) !important;
+                }
+
+                #al-tabs button.active {
+                    color: var(--al-accent, #4CAF50) !important;
+                    border-bottom-color: var(--al-accent, #4CAF50) !important;
                 }
 
                 #al-ticker {
