@@ -5909,7 +5909,7 @@
                 patrolPills: [],    // Array of pill values for patrol field
                 controlOneRadio: null,
                 updatedOn: null,
-                lastTabLabel: '⚫ | Unknown',
+                lastTabLabel: '⚙️ | NO USER',
                 lastTickerState: null
             };
         },
@@ -6128,14 +6128,14 @@
                 if (typeValue) {
                     const tl = typeValue.toLowerCase();
                     if (tl.includes('deploy')) {
-                        ctx.typeIcon = '🟡';
+                        ctx.typeIcon = '🟢';  // Deployment → green
                     } else if (tl.includes('return')) {
-                        ctx.typeIcon = '🟢';
+                        ctx.typeIcon = '🟡';  // Return → yellow
                     } else {
-                        ctx.typeIcon = '⚫';
+                        ctx.typeIcon = '⚙️';  // Default → gear
                     }
                 } else {
-                    ctx.typeIcon = '⚫';
+                    ctx.typeIcon = '⚙️';  // Default → gear
                 }
 
                 // ⚠️ CRITICAL: Compute and store tab label in context (Tabbed Names pattern)
@@ -6144,8 +6144,8 @@
                 if (tabId && tabId === this.firstTabId) {
                     ctx.lastTabLabel = 'Home';
                 } else {
-                    const icon = ctx.typeIcon || '⚫';
-                    const lastName = ctx.userLast || 'Unknown';
+                    const icon = ctx.typeIcon || '⚙️';
+                    const lastName = ctx.userLast || 'NO USER';
                     ctx.lastTabLabel = `${icon} | ${lastName}`;
                 }
             } catch (error) {
@@ -6220,17 +6220,19 @@
 
         /**
          * Extract last name from full name string
+         * Handles "Last, First" and "First Last" formats
+         * Returns uppercase last name or "NO USER" if missing
          */
         extractLastName(userFull) {
-            if (!userFull) return 'Unknown';
+            if (!userFull) return 'NO USER';
             const trimmed = String(userFull).trim();
-            if (!trimmed) return 'Unknown';
+            if (!trimmed) return 'NO USER';
 
             const comma = trimmed.indexOf(',');
-            if (comma > 0) return trimmed.slice(0, comma).trim();
+            if (comma > 0) return trimmed.slice(0, comma).trim().toUpperCase();
 
             const parts = trimmed.split(/\s+/);
-            return parts[parts.length - 1] || 'Unknown';
+            return (parts[parts.length - 1] || 'NO USER').toUpperCase();
         },
 
         /**
@@ -6366,7 +6368,7 @@
 
                     // ⚠️ CRITICAL: Use the stored lastTabLabel from context
                     // DO NOT compute it fresh - that would require reading fields from inactive tabs
-                    const label = ctx.lastTabLabel || '⚫ | Unknown';
+                    const label = ctx.lastTabLabel || '⚙️ | NO USER';
 
                     // Update the label text and tooltip
                     labelEl.textContent = label;
