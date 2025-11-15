@@ -1310,6 +1310,12 @@
                     overflow-x: auto;
                     padding: 0;
                     margin: 0;
+                    /* Hide scrollbar while keeping scroll functionality */
+                    scrollbar-width: none; /* Firefox */
+                    -ms-overflow-style: none; /* IE and Edge */
+                }
+                #al-tabs::-webkit-scrollbar {
+                    display: none; /* Chrome, Safari, Opera */
                 }
                 #al-tabs button {
                     background: transparent;
@@ -1335,6 +1341,12 @@
                     flex: 1;
                     overflow-y: auto;
                     padding: 15px;
+                    /* Hide scrollbar while keeping scroll functionality */
+                    scrollbar-width: none; /* Firefox */
+                    -ms-overflow-style: none; /* IE and Edge */
+                }
+                #al-content::-webkit-scrollbar {
+                    display: none; /* Chrome, Safari, Opera */
                 }
 
                 /* Ticker */
@@ -1397,6 +1409,8 @@
                 .al-toast.top-left { top: 20px; left: 20px; }
                 .al-toast.bottom-right { bottom: 20px; right: 20px; }
                 .al-toast.bottom-left { bottom: 20px; left: 20px; }
+                .al-toast.top-center { top: 20px; left: 50%; transform: translateX(-50%); }
+                .al-toast.bottom-center { bottom: 20px; left: 50%; transform: translateX(-50%); }
                 .al-toast.success { background: #4CAF50; }
                 .al-toast.error { background: #f44336; }
                 .al-toast.warning { background: #ff9800; }
@@ -1613,8 +1627,114 @@
             document.getElementById('al-close').onclick = () => this.togglePanel();
             document.getElementById('al-minimize').onclick = () => this.togglePanel();
 
+            // Drag functionality for docked → floating conversion
+            this.initDragBehavior(header);
+
             // Render current tab
             this.renderTab(this.currentTab);
+        },
+
+        /**
+         * Initialize drag behavior for panel header
+         * Allows dragging docked panels to convert them to floating, with viewport constraints
+         */
+        initDragBehavior(header) {
+            let isDragging = false;
+            let startX = 0;
+            let startY = 0;
+            let currentX = 0;
+            let currentY = 0;
+            let offsetX = 0;
+            let offsetY = 0;
+            const dragThreshold = 5; // pixels to move before triggering drag
+
+            header.style.cursor = 'grab';
+
+            const onMouseDown = (e) => {
+                // Don't drag if clicking on buttons
+                if (e.target.closest('button')) return;
+
+                isDragging = false;
+                startX = e.clientX;
+                startY = e.clientY;
+
+                // Get current panel position
+                const rect = this.panel.getBoundingClientRect();
+                offsetX = startX - rect.left;
+                offsetY = startY - rect.top;
+
+                header.style.cursor = 'grabbing';
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+                e.preventDefault();
+            };
+
+            const onMouseMove = (e) => {
+                currentX = e.clientX;
+                currentY = e.clientY;
+
+                // Check if we've moved beyond the threshold
+                const deltaX = currentX - startX;
+                const deltaY = currentY - startY;
+                const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+                if (!isDragging && distance > dragThreshold) {
+                    isDragging = true;
+
+                    // Convert docked panel to floating if needed
+                    if (this.panel.className !== 'float') {
+                        const settings = AL.persistence.get('settings', AL.stubs.getDefaultSettings());
+
+                        // Get current panel dimensions
+                        const rect = this.panel.getBoundingClientRect();
+
+                        // Switch to float mode
+                        settings.dockMode = 'float';
+                        AL.persistence.set('settings', settings);
+                        this.panel.className = 'float';
+
+                        // Set panel position to current mouse position minus offset
+                        this.panel.style.top = (currentY - offsetY) + 'px';
+                        this.panel.style.left = (currentX - offsetX) + 'px';
+                        this.panel.style.right = 'auto';
+                        this.panel.style.bottom = 'auto';
+                        this.panel.style.width = rect.width + 'px';
+                        this.panel.style.height = rect.height + 'px';
+                    }
+                }
+
+                if (isDragging) {
+                    // Update panel position with viewport constraints
+                    let newLeft = currentX - offsetX;
+                    let newTop = currentY - offsetY;
+
+                    const rect = this.panel.getBoundingClientRect();
+                    const panelWidth = rect.width;
+                    const panelHeight = rect.height;
+
+                    // Apply viewport constraints
+                    const minMargin = 10; // Small margin to keep header accessible
+                    const maxLeft = window.innerWidth - panelWidth - minMargin;
+                    const maxTop = window.innerHeight - panelHeight - minMargin;
+
+                    newLeft = Math.max(minMargin, Math.min(newLeft, maxLeft));
+                    newTop = Math.max(minMargin, Math.min(newTop, maxTop));
+
+                    this.panel.style.left = newLeft + 'px';
+                    this.panel.style.top = newTop + 'px';
+                }
+
+                e.preventDefault();
+            };
+
+            const onMouseUp = () => {
+                isDragging = false;
+                header.style.cursor = 'grab';
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            };
+
+            header.addEventListener('mousedown', onMouseDown);
         },
 
         /**
@@ -1663,16 +1783,23 @@
                 const ctx = AL.pageState?.getActiveTabContext();
                 if (!ctx) return;
 
-                // Get user name (prefer full name, fallback to last name)
-                const nameText = ctx.userFull || ctx.userLast || 'Unknown';
-
-                // Build asset parts (only show if they have values)
+                // Build asset parts (ONLY pill values from weapon, taser, and patrol fields)
                 const assetParts = [];
-                if (ctx.vehicle) assetParts.push(ctx.vehicle);
-                if (ctx.weapon) assetParts.push(ctx.weapon);
-                if (ctx.taser) assetParts.push(ctx.taser);
-                if (ctx.patrol) assetParts.push(ctx.patrol);
-                if (ctx.controlOneRadio) assetParts.push(ctx.controlOneRadio);
+
+                // Add weapon pills
+                if (ctx.weaponPills && ctx.weaponPills.length > 0) {
+                    assetParts.push(...ctx.weaponPills);
+                }
+
+                // Add taser pills
+                if (ctx.taserPills && ctx.taserPills.length > 0) {
+                    assetParts.push(...ctx.taserPills);
+                }
+
+                // Add patrol pills
+                if (ctx.patrolPills && ctx.patrolPills.length > 0) {
+                    assetParts.push(...ctx.patrolPills);
+                }
 
                 // Get prefix text if active
                 const prefixText = AL.prefixes.activePrefix ?
@@ -1707,19 +1834,22 @@
                 this.ticker.style.color = textColor;
 
                 // Build ticker HTML with optimized format
-                // Format: ●  NAME  |  ASSET1  |  ASSET2  |  ...  [PREFIX]
+                // Format: ● ASSET1 | ASSET2 | ... [PREFIX]
                 let tickerHTML = `
                     <span style="display: flex; align-items: center;">
                         <span class="al-ticker-status-dot ${modeDotClass}"></span>
                     </span>
-                    <span style="font-weight: 500;">${AL.utils.escapeHtml(nameText)}</span>
                 `;
 
                 // Add assets with separator
                 if (assetParts.length > 0) {
-                    for (const asset of assetParts) {
-                        tickerHTML += `<span>|</span><span>${AL.utils.escapeHtml(asset)}</span>`;
+                    tickerHTML += `<span style="font-weight: 500;">${AL.utils.escapeHtml(assetParts[0])}</span>`;
+                    for (let i = 1; i < assetParts.length; i++) {
+                        tickerHTML += `<span>|</span><span>${AL.utils.escapeHtml(assetParts[i])}</span>`;
                     }
+                } else {
+                    // Show a subtle message when no assets are selected
+                    tickerHTML += `<span style="font-weight: 400; opacity: 0.7;">No assets selected</span>`;
                 }
 
                 // Add prefix if active
@@ -2416,8 +2546,10 @@
                         <label>Toast Position</label>
                         <select class="al-input" id="al-setting-toast-position">
                             <option value="top-left" ${settings.toastPosition === 'top-left' ? 'selected' : ''}>Top Left</option>
+                            <option value="top-center" ${settings.toastPosition === 'top-center' ? 'selected' : ''}>Top Center</option>
                             <option value="top-right" ${settings.toastPosition === 'top-right' ? 'selected' : ''}>Top Right</option>
                             <option value="bottom-left" ${settings.toastPosition === 'bottom-left' ? 'selected' : ''}>Bottom Left</option>
+                            <option value="bottom-center" ${settings.toastPosition === 'bottom-center' ? 'selected' : ''}>Bottom Center</option>
                             <option value="bottom-right" ${settings.toastPosition === 'bottom-right' ? 'selected' : ''}>Bottom Right</option>
                         </select>
                     </div>
@@ -5660,6 +5792,9 @@
         // Map<tabId, PageContext> for per-tab state
         store: new Map(),
 
+        // Track the first tab ID for "Home" label
+        firstTabId: null,
+
         // Throttled apply function to avoid excessive calls
         _throttledApply: null,
         _mutationObserver: null,
@@ -5767,6 +5902,9 @@
                 weapon: null,
                 taser: null,
                 patrol: null,
+                weaponPills: [],    // Array of pill values for weapon field
+                taserPills: [],     // Array of pill values for taser field
+                patrolPills: [],    // Array of pill values for patrol field
                 controlOneRadio: null,
                 updatedOn: null,
                 lastTabLabel: '⚫ | Unknown',
@@ -5896,13 +6034,60 @@
         },
 
         /**
+         * Read pill values from a multi-select field
+         * Returns an array of pill text values
+         */
+        readPillValues(fieldKey) {
+            const element = this.findVisibleField(fieldKey);
+            if (!element) return [];
+
+            try {
+                // Find the parent container that holds the pills
+                // Pills are typically in a container near the input
+                const container = element.closest('.form-field') || element.closest('[data-field-name]') || element.parentElement;
+                if (!container) return [];
+
+                // Search for pill elements in the container
+                // ServiceNow uses various pill patterns - try multiple selectors
+                const pillSelectors = [
+                    '.sn-tag-button .sn-tag-label',  // Standard ServiceNow pills
+                    '.now-tag .now-tag-label',        // Now Experience pills
+                    '[role="button"][class*="tag"] span',  // Generic tag buttons
+                    '.token span',                     // Token-based pills
+                    '[data-value]'                     // Elements with data-value attribute
+                ];
+
+                const pillValues = [];
+
+                for (const selector of pillSelectors) {
+                    const pills = AL.utils.querySelectorAllDeep(selector, container);
+                    if (pills.length > 0) {
+                        pills.forEach(pill => {
+                            const text = pill.textContent?.trim();
+                            if (text && !text.includes('×') && !text.includes('✕')) {
+                                // Filter out close button text
+                                pillValues.push(text);
+                            }
+                        });
+                        if (pillValues.length > 0) break; // Found pills, stop searching
+                    }
+                }
+
+                return pillValues;
+            } catch (error) {
+                console.log('[pageState] Error reading pill values:', fieldKey, error);
+                return [];
+            }
+        },
+
+        /**
          * Read fields and update the provided context
          *
          * ⚠️ CRITICAL: This function MUST store lastTabLabel in the context
          * ⚠️ DO NOT remove ctx.lastTabLabel assignment - it's used by updateAllTabLabels()
          * ⚠️ This ensures labels persist when tabs are reordered
          */
-        readFieldsAndUpdate(ctx) {
+        readFieldsAndUpdate(ctx, tabId = null) {
             if (!AL.fields) {
                 console.log('[pageState] Fields module not ready');
                 return;
@@ -5913,22 +6098,29 @@
                 const typeValue = this.readFieldValue('type');
                 const userValue = this.readFieldValue('user');
                 const vehicleValue = this.readFieldValue('vehicle');
-                const weaponValue = this.readFieldValue('weapon');
-                const taserValue = this.readFieldValue('taser');
-                const patrolValue = this.readFieldValue('patrol');
                 const controlOneRadioValue = this.readFieldValue('controlOneRadio');
                 const updatedOnValue = this.readFieldValue('updated_on');
+
+                // Read ONLY pill values for weapon, taser, and patrol (multi-select fields)
+                const weaponPills = this.readPillValues('weapon');
+                const taserPills = this.readPillValues('taser');
+                const patrolPills = this.readPillValues('patrol');
 
                 // Update context
                 ctx.type = typeValue;
                 ctx.userFull = userValue;
                 ctx.userLast = this.extractLastName(userValue);
                 ctx.vehicle = vehicleValue;
-                ctx.weapon = weaponValue;
-                ctx.taser = taserValue;
-                ctx.patrol = patrolValue;
+                ctx.weaponPills = weaponPills;  // Array of pill values
+                ctx.taserPills = taserPills;    // Array of pill values
+                ctx.patrolPills = patrolPills;  // Array of pill values
                 ctx.controlOneRadio = controlOneRadioValue;
                 ctx.updatedOn = updatedOnValue;
+
+                // Also store legacy single-value versions for backward compatibility
+                ctx.weapon = this.readFieldValue('weapon');
+                ctx.taser = this.readFieldValue('taser');
+                ctx.patrol = this.readFieldValue('patrol');
 
                 // Set type icon
                 if (typeValue) {
@@ -5946,9 +6138,14 @@
 
                 // ⚠️ CRITICAL: Compute and store tab label in context (Tabbed Names pattern)
                 // This stored label is used by updateAllTabLabels() to set all tab labels
-                const icon = ctx.typeIcon || '⚫';
-                const lastName = ctx.userLast || 'Unknown';
-                ctx.lastTabLabel = `${icon} | ${lastName}`;
+                // Special case: First tab is always "Home" with no icons
+                if (tabId && tabId === this.firstTabId) {
+                    ctx.lastTabLabel = 'Home';
+                } else {
+                    const icon = ctx.typeIcon || '⚫';
+                    const lastName = ctx.userLast || 'Unknown';
+                    ctx.lastTabLabel = `${icon} | ${lastName}`;
+                }
             } catch (error) {
                 console.log('[pageState] Error in readFieldsAndUpdate:', error);
             }
@@ -5970,6 +6167,15 @@
                     return; // No tabs found yet
                 }
 
+                // Track the first tab ID for "Home" label (set once, never change)
+                if (!this.firstTabId && tabs.length > 0) {
+                    const firstTid = this.tabId(tabs[0]);
+                    if (firstTid) {
+                        this.firstTabId = firstTid;
+                        console.log('[pageState] First tab ID set to:', firstTid);
+                    }
+                }
+
                 // Ensure all visible tabs have contexts
                 const currentTabIds = new Set();
                 for (const li of tabs) {
@@ -5987,7 +6193,7 @@
                     const tid = this.tabId(activeTab);
                     if (tid) {
                         const ctx = this.getOrCreateContext(tid);
-                        this.readFieldsAndUpdate(ctx);  // Only reads visible fields
+                        this.readFieldsAndUpdate(ctx, tid);  // Only reads visible fields
                     }
                 }
 
