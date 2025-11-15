@@ -2050,7 +2050,7 @@
                     flex: 1;
                     overflow-y: auto;
                     padding: var(--space-lg);
-                    background: var(--bg-primary);
+                    background: transparent;
                     scrollbar-width: thin;
                     scrollbar-color: var(--border-medium) transparent;
                 }
@@ -4450,23 +4450,23 @@
 
                 <h3>Status</h3>
                 <table style="width: 100%; border-collapse: collapse;">
-                    <tr style="border-bottom: 1px solid #444;">
+                    <tr style="border-bottom: 1px solid var(--border-light);">
                         <td style="padding: 8px;"><strong>Mode:</strong></td>
                         <td style="padding: 8px;">${AL.capture.getModeLabel()}</td>
                     </tr>
-                    <tr style="border-bottom: 1px solid #444;">
+                    <tr style="border-bottom: 1px solid var(--border-light);">
                         <td style="padding: 8px;"><strong>Role:</strong></td>
                         <td style="padding: 8px;">${leader ? 'Leader' : 'Follower'}</td>
                     </tr>
-                    <tr style="border-bottom: 1px solid #444;">
+                    <tr style="border-bottom: 1px solid var(--border-light);">
                         <td style="padding: 8px;"><strong>Context:</strong></td>
                         <td style="padding: 8px;">${AL.activeContext.isArmoryContext ? 'Armory' : 'Non-Armory'}</td>
                     </tr>
-                    <tr style="border-bottom: 1px solid #444;">
+                    <tr style="border-bottom: 1px solid var(--border-light);">
                         <td style="padding: 8px;"><strong>Active Prefix:</strong></td>
                         <td style="padding: 8px;">${AL.prefixes.activePrefix ? `${AL.prefixes.activePrefix.label} (${AL.prefixes.activeStickyCount})` : 'None'}</td>
                     </tr>
-                    <tr style="border-bottom: 1px solid #444;">
+                    <tr style="border-bottom: 1px solid var(--border-light);">
                         <td style="padding: 8px;"><strong>Last Scan:</strong></td>
                         <td style="padding: 8px;">${lastScan ? lastScan.scanText : 'None'}</td>
                     </tr>
@@ -4537,7 +4537,7 @@
             const fieldsList = document.getElementById('al_fields_list');
             AL.fields.fields.forEach(field => {
                 const row = document.createElement('div');
-                row.style.cssText = 'background: #2a2a2a; padding: 10px; margin-bottom: 10px; border-radius: 4px;';
+                row.style.cssText = 'padding: 10px; margin-bottom: 10px; border-radius: 4px;';
                 row.innerHTML = `
                     <div style="display: flex; align-items: center; margin-bottom: 8px;">
                         <input type="checkbox" ${field.enabled ? 'checked' : ''} data-key="${field.key}" class="al-field-enabled" style="margin-right: 8px;">
@@ -4613,11 +4613,11 @@
                 <p style="margin-bottom: 15px;">Configure pattern matching rules for barcode processing.</p>
 
                 <!-- Pattern Tester -->
-                <div style="background: #2a2a2a; padding: 12px; margin-bottom: 20px; border-radius: 4px;">
+                <div style="padding: 12px; margin-bottom: 20px; border-radius: 4px; border: 1px solid var(--border-light);">
                     <h4 style="margin: 0 0 10px 0;">Pattern Tester</h4>
                     <input type="text" id="al_rule_test_input" class="al-input" placeholder="Enter test barcode..." style="margin-bottom: 10px;">
                     <button class="al-btn al-btn-secondary" id="al_rule_test_btn">Test Pattern</button>
-                    <div id="al_rule_test_result" style="margin-top: 10px; padding: 10px; background: #1e1e1e; border-radius: 4px; min-height: 40px;"></div>
+                    <div id="al_rule_test_result" style="margin-top: 10px; padding: 10px; border-radius: 4px; min-height: 40px; border: 1px solid var(--border-light);"></div>
                 </div>
 
                 <!-- Action Buttons -->
@@ -4632,7 +4632,7 @@
             const rulesList = document.getElementById('al_rules_list');
             AL.rules.rules.forEach((rule, index) => {
                 const row = document.createElement('div');
-                row.style.cssText = 'background: #2a2a2a; padding: 12px; margin-bottom: 10px; border-radius: 4px;';
+                row.style.cssText = 'padding: 12px; margin-bottom: 10px; border-radius: 4px; border: 1px solid var(--border-light);';
 
                 // Format actions for display
                 const actionsDisplay = rule.actions.map(a => {
@@ -4649,13 +4649,13 @@
                         <strong style="font-size: 14px;">${rule.name}</strong>
                         <span style="color: #999; margin-left: 8px; font-size: 11px;">(Priority: ${index + 1})</span>
                     </div>
-                    <div style="margin-bottom: 8px; padding: 8px; background: #1e1e1e; border-radius: 3px; font-family: monospace; font-size: 12px;">
+                    <div style="margin-bottom: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: 3px; font-family: monospace; font-size: 12px;">
                         <div style="margin-bottom: 4px;"><strong>Pattern:</strong> ${AL.utils.escapeHtml(rule.pattern)}</div>
                         <div style="margin-bottom: 4px;"><strong>Type:</strong> ${rule.patternType}</div>
                         ${rule.useDirective ? `<div style="margin-bottom: 4px;"><strong>Directive:</strong> ${rule.directiveChars.join(', ')} → ${rule.directiveChars.map(c => AL.rules.directiveMap[c] || c).join(', ')}</div>` : ''}
                         ${rule.speechLabel ? `<div style="margin-bottom: 4px;"><strong>Speech:</strong> ${rule.speechLabel}</div>` : ''}
                     </div>
-                    <div style="margin-bottom: 8px; padding: 8px; background: #1e1e1e; border-radius: 3px; font-size: 12px;">
+                    <div style="margin-bottom: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: 3px; font-size: 12px;">
                         <strong>Actions:</strong> ${actionsDisplay || 'None'}
                     </div>
                     <div>
@@ -4806,7 +4806,7 @@
 
                 <!-- Active Prefix Display -->
                 ${activePrefix ? `
-                    <div style="background: #2a2a2a; padding: 12px; margin-bottom: 20px; border-radius: 4px; border-left: 4px solid #4CAF50;">
+                    <div style="padding: 12px; margin-bottom: 20px; border-radius: 4px; border-left: 4px solid #4CAF50; border: 1px solid var(--border-light);">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
                                 <strong style="color: #4CAF50;">Active Prefix:</strong> ${activePrefix.label}
@@ -4816,7 +4816,7 @@
                         </div>
                     </div>
                 ` : `
-                    <div style="background: #2a2a2a; padding: 12px; margin-bottom: 20px; border-radius: 4px;">
+                    <div style="padding: 12px; margin-bottom: 20px; border-radius: 4px; border: 1px solid var(--border-light);">
                         <div style="color: #999; font-size: 12px;">No active prefix. Press Alt+1-9 to activate.</div>
                     </div>
                 `}
@@ -4845,7 +4845,7 @@
             } else {
                 AL.prefixes.prefixes.forEach(prefix => {
                     const row = document.createElement('div');
-                    row.style.cssText = 'background: #2a2a2a; padding: 12px; margin-bottom: 10px; border-radius: 4px;';
+                    row.style.cssText = 'padding: 12px; margin-bottom: 10px; border-radius: 4px; border: 1px solid var(--border-light);';
 
                     const isActive = activePrefix && activePrefix.id === prefix.id;
 
@@ -4857,7 +4857,7 @@
                                     ${prefix.hotkey ? `<span style="background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 8px; font-family: monospace;">Alt+${prefix.hotkey}</span>` : ''}
                                     ${isActive ? `<span style="background: #f59e0b; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 8px;">ACTIVE</span>` : ''}
                                 </div>
-                                <div style="font-family: monospace; font-size: 12px; background: #1e1e1e; padding: 6px 8px; border-radius: 3px; margin-bottom: 4px;">
+                                <div style="font-family: monospace; font-size: 12px; border: 1px solid var(--border-light); padding: 6px 8px; border-radius: 3px; margin-bottom: 4px;">
                                     "${AL.utils.escapeHtml(prefix.value)}"
                                 </div>
                                 <div style="font-size: 11px; color: #999;">
@@ -4938,8 +4938,8 @@
                 <p style="margin-bottom: 20px;">Configure system preferences and behavior.</p>
 
                 <!-- Theme Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Theme</h4>
+                <div style="padding: 15px; margin-bottom: 15px; border-radius: 4px; border: 1px solid var(--border-light);">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Theme</h4>
 
                     <div class="al-form-group">
                         <label>Color Theme</label>
@@ -4954,8 +4954,8 @@
                 </div>
 
                 <!-- Layout Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Layout</h4>
+                <div style="padding: 15px; margin-bottom: 15px; border-radius: 4px; border: 1px solid var(--border-light);">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Layout</h4>
 
                     <div class="al-form-group">
                         <label>Dock Mode</label>
@@ -4991,8 +4991,8 @@
                 </div>
 
                 <!-- Capture Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Scanner Capture</h4>
+                <div style="padding: 15px; margin-bottom: 15px; border-radius: 4px; border: 1px solid var(--border-light);">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Scanner Capture</h4>
 
                     <div class="al-form-group">
                         <label>Scan Throttle (ms)</label>
@@ -5014,8 +5014,8 @@
                 </div>
 
                 <!-- Toast Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Toast Notifications</h4>
+                <div style="padding: 15px; margin-bottom: 15px; border-radius: 4px; border: 1px solid var(--border-light);">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Toast Notifications</h4>
 
                     <div class="al-form-group">
                         <label>Toast Position</label>
@@ -5066,8 +5066,8 @@
                 </div>
 
                 <!-- Speech Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Speech Synthesis</h4>
+                <div style="padding: 15px; margin-bottom: 15px; border-radius: 4px; border: 1px solid var(--border-light);">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Speech Synthesis</h4>
 
                     <div class="al-form-group">
                         <div class="al-checkbox-group">
@@ -5094,8 +5094,8 @@
                 </div>
 
                 <!-- Ticker Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Ticker</h4>
+                <div style="padding: 15px; margin-bottom: 15px; border-radius: 4px; border: 1px solid var(--border-light);">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Ticker</h4>
 
                     <div class="al-form-group">
                         <div class="al-checkbox-group">
@@ -5118,8 +5118,8 @@
                 </div>
 
                 <!-- Debug Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Debug</h4>
+                <div style="padding: 15px; margin-bottom: 15px; border-radius: 4px; border: 1px solid var(--border-light);">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Debug</h4>
 
                     <div class="al-form-group">
                         <div class="al-checkbox-group">
@@ -5239,8 +5239,8 @@
                 <p style="margin-bottom: 15px; color: #999;">Axon Evidence.com integration</p>
 
                 <!-- Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Settings</h4>
+                <div style="border: 1px solid var(--border-light); padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Settings</h4>
 
                     <div class="al-form-group">
                         <div class="al-checkbox-group">
@@ -5268,8 +5268,8 @@
                 </div>
 
                 <!-- Launch Controls -->
-                <div style="background: #2a2a2a; padding: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Quick Launch</h4>
+                <div style="border: 1px solid var(--border-light); padding: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Quick Launch</h4>
 
                     <p style="font-size: 12px; color: #999; margin-bottom: 15px;">
                         Automatically reads User field from active ServiceNow page to look up camera assignments.
@@ -5293,7 +5293,7 @@
                             overflow: hidden;
                             display: none;
                         ">
-                            <div style="background: #2a2a2a; padding: 8px; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 10px;">
+                            <div style="border: 1px solid var(--border-light); padding: 8px; border-bottom: 1px solid var(--border-light); display: flex; align-items: center; gap: 10px;">
                                 <span style="flex: 1; font-size: 11px; color: #999;" id="al-bwc-iframe-url">No page loaded</span>
                                 <button class="al-btn al-btn-secondary" id="al-bwc-iframe-close" style="padding: 4px 8px; font-size: 11px;">Close</button>
                             </div>
@@ -5394,8 +5394,8 @@
                 <p style="margin-bottom: 15px; color: #999;">TASER device management integration</p>
 
                 <!-- Settings -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Settings</h4>
+                <div style="border: 1px solid var(--border-light); padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Settings</h4>
 
                     <div class="al-form-group">
                         <div class="al-checkbox-group">
@@ -5423,8 +5423,8 @@
                 </div>
 
                 <!-- Launch Controls -->
-                <div style="background: #2a2a2a; padding: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Quick Launch</h4>
+                <div style="border: 1px solid var(--border-light); padding: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Quick Launch</h4>
 
                     <p style="font-size: 12px; color: #999; margin-bottom: 15px;">
                         Automatically reads Taser Asset field from active ServiceNow page to look up device info.
@@ -5448,7 +5448,7 @@
                             overflow: hidden;
                             display: none;
                         ">
-                            <div style="background: #2a2a2a; padding: 8px; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 10px;">
+                            <div style="border: 1px solid var(--border-light); padding: 8px; border-bottom: 1px solid var(--border-light); display: flex; align-items: center; gap: 10px;">
                                 <span style="flex: 1; font-size: 11px; color: #999;" id="al-x10-iframe-url">No page loaded</span>
                                 <button class="al-btn al-btn-secondary" id="al-x10-iframe-close" style="padding: 4px 8px; font-size: 11px;">Close</button>
                             </div>
@@ -5577,8 +5577,8 @@
                 </div>
 
                 <!-- Favorites List -->
-                <div style="background: #2a2a2a; padding: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">
+                <div style="border: 1px solid var(--border-light); padding: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">
                         Saved Favorites (${favorites.length})
                     </h4>
 
@@ -5870,8 +5870,8 @@
                 </div>
 
                 <!-- Macro List -->
-                <div style="background: #2a2a2a; padding: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">
+                <div style="border: 1px solid var(--border-light); padding: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">
                         Macros (${macros.length})
                     </h4>
 
@@ -6212,8 +6212,8 @@
                 <p style="margin-bottom: 15px; color: #999;">Collect multiple scans into a session or queue barcodes for processing</p>
 
                 <!-- Batch Queue Input -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Queue Multiple Barcodes</h4>
+                <div style="border: 1px solid var(--border-light); padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Queue Multiple Barcodes</h4>
                     <div style="margin-bottom: 10px;">
                         <label style="display: block; margin-bottom: 5px; font-size: 12px;">Paste barcodes (one per line):</label>
                         <textarea id="al-batch-queue-input" class="al-input" rows="6" placeholder="Scan1&#10;Scan2&#10;Scan3&#10;...&#10;&#10;Paste or type one barcode per line, then click Queue Batch to process them sequentially." style="font-family: monospace; resize: vertical; min-height: 120px;"></textarea>
@@ -6226,8 +6226,8 @@
                 </div>
 
                 <!-- Session Controls -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">Session Control</h4>
+                <div style="border: 1px solid var(--border-light); padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">Session Control</h4>
 
                     <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
                         <button class="al-btn ${isActive ? 'al-btn-danger' : 'al-btn-primary'}" id="al-batch-toggle-btn">
@@ -6263,8 +6263,8 @@
                 </div>
 
                 <!-- Scan List -->
-                <div style="background: #2a2a2a; padding: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">
+                <div style="border: 1px solid var(--border-light); padding: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">
                         Scans in Batch (${batch.scans.length})
                     </h4>
 
@@ -6286,7 +6286,7 @@
                             </div>
                         ` : `
                             <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                                <thead style="position: sticky; top: 0; background: #2a2a2a; border-bottom: 2px solid #444;">
+                                <thead style="position: sticky; top: 0; border: 1px solid var(--border-light); border-bottom: 2px solid var(--border-medium);">
                                     <tr>
                                         <th style="padding: 8px; text-align: left; font-weight: 600;">#</th>
                                         <th style="padding: 8px; text-align: left; font-weight: 600;">Time</th>
@@ -6502,7 +6502,7 @@
                         </div>
                     ` : `
                         <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                            <thead style="position: sticky; top: 0; background: #2a2a2a; border-bottom: 2px solid #444;">
+                            <thead style="position: sticky; top: 0; border: 1px solid var(--border-light); border-bottom: 2px solid var(--border-medium);">
                                 <tr>
                                     <th style="padding: 10px; text-align: left; font-weight: 600;">Time</th>
                                     <th style="padding: 10px; text-align: left; font-weight: 600;">Scan</th>
@@ -6530,7 +6530,7 @@
                                                 <div>${time}</div>
                                             </td>
                                             <td style="padding: 10px;">
-                                                <code style="background: #2a2a2a; padding: 2px 6px; border-radius: 3px; font-size: 11px;">${entry.scan || 'N/A'}</code>
+                                                <code style="border: 1px solid var(--border-light); padding: 2px 6px; border-radius: 3px; font-size: 11px;">${entry.scan || 'N/A'}</code>
                                             </td>
                                             <td style="padding: 10px;">
                                                 ${entry.type ? `<span style="color: ${entry.type === 'Deployment' ? '#00ff88' : '#ffaa00'};">${entry.type}</span>` : '<span style="color: #666;">—</span>'}
@@ -6604,8 +6604,8 @@
                 <p style="margin-bottom: 15px; color: #999;">System logs and diagnostics</p>
 
                 <!-- Stats Panel -->
-                <div style="background: #2a2a2a; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
-                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid #444; padding-bottom: 8px;">System Statistics</h4>
+                <div style="border: 1px solid var(--border-light); padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <h4 style="margin: 0 0 12px 0; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">System Statistics</h4>
                     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; font-size: 12px;">
                         <div><strong>Mode:</strong> ${stats.captureMode}</div>
                         <div><strong>Leader:</strong> ${stats.isLeader ? 'Yes' : 'No'}</div>
@@ -7104,7 +7104,7 @@
                 }
 
                 return `
-                    <div class="al-action-item" data-index="${index}" style="background: #1e1e1e; padding: 8px; margin-bottom: 6px; border-radius: 3px;">
+                    <div class="al-action-item" data-index="${index}" style="border: 1px solid var(--border-light); padding: 8px; margin-bottom: 6px; border-radius: 3px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
                             <span style="font-size: 12px; flex: 1;">${display}</span>
                             <div style="display: flex; gap: 4px;">
