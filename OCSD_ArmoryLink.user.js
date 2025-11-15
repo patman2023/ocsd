@@ -1145,6 +1145,7 @@
         dockMode: 'dock-right',
         panel: null,
         ticker: null,
+        bubble: null,
         toast: null,
         stripLauncher: null,
         debugLogs: [],
@@ -1157,6 +1158,7 @@
             this.injectStyles();
             this.createPanel();
             this.createTicker();
+            this.createBubble();
             this.addDebugLog('system', '[ui] Initialized');
         },
 
@@ -1479,6 +1481,33 @@
                     writing-mode: vertical-rl;
                     font-size: 12px;
                     color: #4CAF50;
+                }
+
+                /* Bubble Launcher (appears when panel is closed) */
+                #al-bubble {
+                    position: fixed;
+                    bottom: 20px;
+                    right: 20px;
+                    width: 60px;
+                    height: 60px;
+                    background: #4CAF50;
+                    border-radius: 50%;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                    z-index: 999999;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 28px;
+                    color: white;
+                    transition: all 0.3s ease;
+                }
+                #al-bubble:hover {
+                    transform: scale(1.1);
+                    box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+                }
+                #al-bubble:active {
+                    transform: scale(0.95);
                 }
 
                 /* Modal Overlay */
@@ -1930,6 +1959,24 @@
                 utterance.pitch = settings.speechPitch || 1.0;
                 window.speechSynthesis.speak(utterance);
             }
+        },
+
+        /**
+         * Create bubble launcher (appears when panel is closed)
+         */
+        createBubble() {
+            this.bubble = document.createElement('div');
+            this.bubble.id = 'al-bubble';
+            this.bubble.innerHTML = '⚙️';
+            this.bubble.title = 'Open ArmoryLink Panel';
+            this.bubble.style.display = 'none'; // Hidden by default (panel is open initially)
+
+            // Click handler to open panel
+            this.bubble.onclick = () => {
+                this.togglePanel();
+            };
+
+            document.body.appendChild(this.bubble);
         },
 
         /**
@@ -4969,7 +5016,13 @@
          */
         togglePanel() {
             if (this.panel) {
-                this.panel.style.display = this.panel.style.display === 'none' ? 'flex' : 'none';
+                const isHidden = this.panel.style.display === 'none';
+                this.panel.style.display = isHidden ? 'flex' : 'none';
+
+                // Show bubble when panel is hidden, hide bubble when panel is visible
+                if (this.bubble) {
+                    this.bubble.style.display = isHidden ? 'none' : 'flex';
+                }
             }
         },
 
@@ -5943,7 +5996,7 @@
                 patrolPills: [],    // Array of pill values for patrol field
                 controlOneRadio: null,
                 updatedOn: null,
-                lastTabLabel: '⚙️ | NO USER',
+                lastTabLabel: '⚫ | NO USER',
                 lastTickerState: null
             };
         },
@@ -6158,18 +6211,18 @@
                 ctx.taser = this.readFieldValue('taser');
                 ctx.patrol = this.readFieldValue('patrol');
 
-                // Set type icon
+                // Set type icon for tab titles
                 if (typeValue) {
                     const tl = typeValue.toLowerCase();
                     if (tl.includes('deploy')) {
-                        ctx.typeIcon = '🟢';  // Deployment → green
+                        ctx.typeIcon = '🟡';  // Deployment → yellow
                     } else if (tl.includes('return')) {
-                        ctx.typeIcon = '🟡';  // Return → yellow
+                        ctx.typeIcon = '🟢';  // Return → green
                     } else {
-                        ctx.typeIcon = '⚙️';  // Default → gear
+                        ctx.typeIcon = '⚫';  // Default → black
                     }
                 } else {
-                    ctx.typeIcon = '⚙️';  // Default → gear
+                    ctx.typeIcon = '⚫';  // Default → black
                 }
 
                 // ⚠️ CRITICAL: Compute and store tab label in context (Tabbed Names pattern)
@@ -6178,7 +6231,7 @@
                 if (tabId && tabId === this.firstTabId) {
                     ctx.lastTabLabel = 'Home';
                 } else {
-                    const icon = ctx.typeIcon || '⚙️';
+                    const icon = ctx.typeIcon || '⚫';
                     const lastName = ctx.userLast || 'NO USER';
                     ctx.lastTabLabel = `${icon} | ${lastName}`;
                 }
@@ -6402,7 +6455,7 @@
 
                     // ⚠️ CRITICAL: Use the stored lastTabLabel from context
                     // DO NOT compute it fresh - that would require reading fields from inactive tabs
-                    const label = ctx.lastTabLabel || '⚙️ | NO USER';
+                    const label = ctx.lastTabLabel || '⚫ | NO USER';
 
                     // Update the label text and tooltip
                     labelEl.textContent = label;
