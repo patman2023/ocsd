@@ -1145,6 +1145,7 @@
         dockMode: 'dock-right',
         panel: null,
         ticker: null,
+        bubble: null,
         toast: null,
         stripLauncher: null,
         debugLogs: [],
@@ -1157,6 +1158,7 @@
             this.injectStyles();
             this.createPanel();
             this.createTicker();
+            this.createBubble();
             this.addDebugLog('system', '[ui] Initialized');
         },
 
@@ -1481,6 +1483,33 @@
                     color: #4CAF50;
                 }
 
+                /* Bubble Launcher (appears when panel is closed) */
+                #al-bubble {
+                    position: fixed;
+                    bottom: 20px;
+                    right: 20px;
+                    width: 60px;
+                    height: 60px;
+                    background: #4CAF50;
+                    border-radius: 50%;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                    z-index: 999999;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 28px;
+                    color: white;
+                    transition: all 0.3s ease;
+                }
+                #al-bubble:hover {
+                    transform: scale(1.1);
+                    box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+                }
+                #al-bubble:active {
+                    transform: scale(0.95);
+                }
+
                 /* Modal Overlay */
                 .al-modal-overlay {
                     position: fixed;
@@ -1785,7 +1814,22 @@
                 const ctx = AL.pageState?.getActiveTabContext();
                 if (!ctx) return;
 
-                // Build asset parts (ONLY pill values from weapon, taser, and patrol fields)
+                // Build ticker parts: PID, Vehicle (Type shown via background color)
+                const tickerParts = [];
+
+                // Add PID/User if available
+                if (ctx.userFull) {
+                    tickerParts.push(ctx.userFull);
+                } else if (ctx.userLast && ctx.userLast !== 'NO USER') {
+                    tickerParts.push(ctx.userLast);
+                }
+
+                // Add Vehicle if available
+                if (ctx.vehicle) {
+                    tickerParts.push(`Vehicle: ${ctx.vehicle}`);
+                }
+
+                // Build asset parts from pills (weapon, taser, patrol)
                 const assetParts = [];
 
                 // Add weapon pills
@@ -1801,6 +1845,11 @@
                 // Add patrol pills
                 if (ctx.patrolPills && ctx.patrolPills.length > 0) {
                     assetParts.push(...ctx.patrolPills);
+                }
+
+                // Add Control One Radio if available
+                if (ctx.controlOneRadio) {
+                    assetParts.push(`Radio: ${ctx.controlOneRadio}`);
                 }
 
                 // Get prefix text if active
@@ -1836,27 +1885,41 @@
                 this.ticker.style.color = textColor;
 
                 // Build ticker HTML with optimized format
-                // Format: ● ASSET1 | ASSET2 | ... [PREFIX]
+                // Format: ● PID | Vehicle | Asset1 | Asset2 | ... [PREFIX]
+                // (Type shown via background color: yellow=Deployment, green=Return)
                 let tickerHTML = `
                     <span style="display: flex; align-items: center;">
                         <span class="al-ticker-status-dot ${modeDotClass}"></span>
                     </span>
                 `;
 
+                // Add ticker parts (PID, Vehicle) with separator
+                if (tickerParts.length > 0) {
+                    tickerHTML += `<span style="font-weight: 600;">${AL.utils.escapeHtml(tickerParts[0])}</span>`;
+                    for (let i = 1; i < tickerParts.length; i++) {
+                        tickerHTML += ` <span style="opacity: 0.5;">|</span> <span style="font-weight: 500;">${AL.utils.escapeHtml(tickerParts[i])}</span>`;
+                    }
+                }
+
                 // Add assets with separator
                 if (assetParts.length > 0) {
-                    tickerHTML += `<span style="font-weight: 500;">${AL.utils.escapeHtml(assetParts[0])}</span>`;
-                    for (let i = 1; i < assetParts.length; i++) {
-                        tickerHTML += `<span>|</span><span>${AL.utils.escapeHtml(assetParts[i])}</span>`;
+                    if (tickerParts.length > 0) {
+                        tickerHTML += ` <span style="opacity: 0.5;">|</span> `;
                     }
-                } else {
-                    // Show a subtle message when no assets are selected
-                    tickerHTML += `<span style="font-weight: 400; opacity: 0.7;">No assets selected</span>`;
+                    tickerHTML += `<span style="font-weight: 400;">${AL.utils.escapeHtml(assetParts[0])}</span>`;
+                    for (let i = 1; i < assetParts.length; i++) {
+                        tickerHTML += ` <span style="opacity: 0.5;">|</span> <span style="font-weight: 400;">${AL.utils.escapeHtml(assetParts[i])}</span>`;
+                    }
+                }
+
+                // If nothing to show
+                if (tickerParts.length === 0 && assetParts.length === 0) {
+                    tickerHTML += `<span style="font-weight: 400; opacity: 0.7;">No data</span>`;
                 }
 
                 // Add prefix if active
                 if (prefixText) {
-                    tickerHTML += `<span style="color: ${prefixColor}; margin-left: 10px;">${AL.utils.escapeHtml(prefixText)}</span>`;
+                    tickerHTML += ` <span style="color: ${prefixColor}; margin-left: 10px; font-weight: 600;">[${AL.utils.escapeHtml(prefixText)}]</span>`;
                 }
 
                 this.ticker.innerHTML = tickerHTML;
@@ -1896,6 +1959,24 @@
                 utterance.pitch = settings.speechPitch || 1.0;
                 window.speechSynthesis.speak(utterance);
             }
+        },
+
+        /**
+         * Create bubble launcher (appears when panel is closed)
+         */
+        createBubble() {
+            this.bubble = document.createElement('div');
+            this.bubble.id = 'al-bubble';
+            this.bubble.innerHTML = '⚙️';
+            this.bubble.title = 'Open ArmoryLink Panel';
+            this.bubble.style.display = 'none'; // Hidden by default (panel is open initially)
+
+            // Click handler to open panel
+            this.bubble.onclick = () => {
+                this.togglePanel();
+            };
+
+            document.body.appendChild(this.bubble);
         },
 
         /**
@@ -4935,7 +5016,13 @@
          */
         togglePanel() {
             if (this.panel) {
-                this.panel.style.display = this.panel.style.display === 'none' ? 'flex' : 'none';
+                const isHidden = this.panel.style.display === 'none';
+                this.panel.style.display = isHidden ? 'flex' : 'none';
+
+                // Show bubble when panel is hidden, hide bubble when panel is visible
+                if (this.bubble) {
+                    this.bubble.style.display = isHidden ? 'none' : 'flex';
+                }
             }
         },
 
@@ -5909,7 +5996,7 @@
                 patrolPills: [],    // Array of pill values for patrol field
                 controlOneRadio: null,
                 updatedOn: null,
-                lastTabLabel: '⚫ | Unknown',
+                lastTabLabel: '⚫ | NO USER',
                 lastTickerState: null
             };
         },
@@ -6124,18 +6211,18 @@
                 ctx.taser = this.readFieldValue('taser');
                 ctx.patrol = this.readFieldValue('patrol');
 
-                // Set type icon
+                // Set type icon for tab titles
                 if (typeValue) {
                     const tl = typeValue.toLowerCase();
                     if (tl.includes('deploy')) {
-                        ctx.typeIcon = '🟡';
+                        ctx.typeIcon = '🟡';  // Deployment → yellow
                     } else if (tl.includes('return')) {
-                        ctx.typeIcon = '🟢';
+                        ctx.typeIcon = '🟢';  // Return → green
                     } else {
-                        ctx.typeIcon = '⚫';
+                        ctx.typeIcon = '⚫';  // Default → black
                     }
                 } else {
-                    ctx.typeIcon = '⚫';
+                    ctx.typeIcon = '⚫';  // Default → black
                 }
 
                 // ⚠️ CRITICAL: Compute and store tab label in context (Tabbed Names pattern)
@@ -6145,7 +6232,7 @@
                     ctx.lastTabLabel = 'Home';
                 } else {
                     const icon = ctx.typeIcon || '⚫';
-                    const lastName = ctx.userLast || 'Unknown';
+                    const lastName = ctx.userLast || 'NO USER';
                     ctx.lastTabLabel = `${icon} | ${lastName}`;
                 }
             } catch (error) {
@@ -6220,17 +6307,19 @@
 
         /**
          * Extract last name from full name string
+         * Handles "Last, First" and "First Last" formats
+         * Returns uppercase last name or "NO USER" if missing
          */
         extractLastName(userFull) {
-            if (!userFull) return 'Unknown';
+            if (!userFull) return 'NO USER';
             const trimmed = String(userFull).trim();
-            if (!trimmed) return 'Unknown';
+            if (!trimmed) return 'NO USER';
 
             const comma = trimmed.indexOf(',');
-            if (comma > 0) return trimmed.slice(0, comma).trim();
+            if (comma > 0) return trimmed.slice(0, comma).trim().toUpperCase();
 
             const parts = trimmed.split(/\s+/);
-            return parts[parts.length - 1] || 'Unknown';
+            return (parts[parts.length - 1] || 'NO USER').toUpperCase();
         },
 
         /**
@@ -6366,7 +6455,7 @@
 
                     // ⚠️ CRITICAL: Use the stored lastTabLabel from context
                     // DO NOT compute it fresh - that would require reading fields from inactive tabs
-                    const label = ctx.lastTabLabel || '⚫ | Unknown';
+                    const label = ctx.lastTabLabel || '⚫ | NO USER';
 
                     // Update the label text and tooltip
                     labelEl.textContent = label;
