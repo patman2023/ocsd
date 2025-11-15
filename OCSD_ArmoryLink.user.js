@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OCSD ArmoryLink
 // @namespace    https://github.com/OCSD
-// @version      0.1.0
+// @version      0.2.0
 // @description  Barcode-driven armory utility for OCSD ServiceNow
 // @author       P. Akhamlich
 // @match        https://ocsheriff.servicenowservices.com/x/g/loaner-workspace/*
@@ -1208,6 +1208,13 @@
         },
 
         /**
+         * Get all rules
+         */
+        getRules() {
+            return this.rules;
+        },
+
+        /**
          * Match scan against rules
          */
         matchScan(scanText) {
@@ -1236,23 +1243,31 @@
             let matches = false;
             let groups = [];
             let directive = null;
+            let processedScan = scanText;
 
-            // Extract directive if enabled
-            if (rule.useDirective && rule.directiveChars) {
-                for (const char of rule.directiveChars) {
-                    if (scanText.includes(char)) {
-                        directive = this.directiveMap[char] || null;
-                        break;
+            // Extract directive if enabled (enhanced with regex pattern)
+            if (rule.useDirective) {
+                const directiveMatch = scanText.match(/^([*\/])(.+?)([*\/])?$/);
+                if (directiveMatch) {
+                    directive = directiveMatch[1] === '*' ? 'Deployment' : 'Return';
+                    processedScan = directiveMatch[2];
+                } else if (rule.directiveChars) {
+                    // Fallback to original char-based detection
+                    for (const char of rule.directiveChars) {
+                        if (scanText.includes(char)) {
+                            directive = this.directiveMap[char] || null;
+                            break;
+                        }
                     }
                 }
             }
 
-            // Test pattern
+            // Test pattern against processed scan
             switch (rule.patternType) {
                 case 'regex':
                     try {
                         const regex = new RegExp(rule.pattern);
-                        const match = scanText.match(regex);
+                        const match = processedScan.match(regex);
                         if (match) {
                             matches = true;
                             groups = match.slice(1); // Capture groups (excluding full match)
@@ -1263,19 +1278,19 @@
                     break;
 
                 case 'string':
-                    matches = scanText === rule.pattern;
+                    matches = processedScan === rule.pattern;
                     break;
 
                 case 'startsWith':
-                    matches = scanText.startsWith(rule.pattern);
+                    matches = processedScan.startsWith(rule.pattern);
                     break;
 
                 case 'contains':
-                    matches = scanText.includes(rule.pattern);
+                    matches = processedScan.includes(rule.pattern);
                     break;
 
                 case 'endsWith':
-                    matches = scanText.endsWith(rule.pattern);
+                    matches = processedScan.endsWith(rule.pattern);
                     break;
 
                 default:
@@ -1284,13 +1299,15 @@
 
             if (!matches) return null;
 
-            // Build variables for template substitution
+            // Build variables for template substitution (enhanced with timestamp and prefix)
             const variables = {
                 scanRaw: scanText,
-                cleanScan: scanText.trim(),
-                last4: AL.utils.getLastDigits(scanText, 4),
-                last3: AL.utils.getLastDigits(scanText, 3),
-                directive: directive
+                cleanScan: processedScan.trim(),
+                last4: AL.utils.getLastDigits(processedScan, 4),
+                last3: AL.utils.getLastDigits(processedScan, 3),
+                directive: directive,
+                timestamp: Date.now(),
+                prefix: AL.prefixes?.activePrefix?.value || ''
             };
 
             // Add regex groups
@@ -1312,16 +1329,18 @@
         },
 
         /**
-         * Process actions with variable substitution
+         * Process actions with variable substitution (enhanced to process all string fields)
          */
         processActions(actions, variables) {
             return actions.map(action => {
                 const processedAction = { ...action };
 
-                // Substitute variables in value
-                if (processedAction.value && typeof processedAction.value === 'string') {
-                    processedAction.value = this.substituteVariables(processedAction.value, variables);
-                }
+                // Substitute variables in all string fields, not just value
+                Object.keys(processedAction).forEach(key => {
+                    if (typeof processedAction[key] === 'string') {
+                        processedAction[key] = this.substituteVariables(processedAction[key], variables);
+                    }
+                });
 
                 return processedAction;
             });
@@ -8089,16 +8108,39 @@
         },
 
         /**
-         * Export all data
+         * Export all data (enhanced with full data structure and file download)
          */
         exportAll() {
-            const allData = {
-                version: '0.1.0',
+            const data = {
+                version: '0.2.0',
                 timestamp: Date.now(),
-                buckets: AL.persistence.getAllSettings()
+                settings: AL.persistence.get('settings', {}),
+                fields: AL.persistence.get('fields', []),
+                rules: AL.persistence.get('rules', []),
+                prefixes: AL.persistence.get('prefixes', []),
+                macros: AL.persistence.get('macros', []),
+                favorites: AL.persistence.get('favorites', []),
+                bwcDevices: AL.persistence.get('bwcDevices', []),
+                x10Devices: AL.persistence.get('x10Devices', []),
+                scanHistory: AL.persistence.get('scanHistory', [])
             };
 
-            return JSON.stringify(allData, null, 2);
+            const json = JSON.stringify(data, null, 2);
+
+            // Download the file
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `armorylink_backup_${Date.now()}.json`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+
+            if (AL.ui && AL.ui.showToast) {
+                AL.ui.showToast('Export Complete', 'All data exported successfully', 'success');
+            }
+
+            return json;
         },
 
         /**
@@ -8156,6 +8198,66 @@
             a.download = filename || `ocsd_armorylink_export_${Date.now()}.json`;
             a.click();
             URL.revokeObjectURL(url);
+        },
+
+        /**
+         * Import data with file picker and confirmation (enhanced)
+         */
+        importData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const data = JSON.parse(event.target.result);
+
+                        if (!data.version) {
+                            throw new Error('Invalid backup file');
+                        }
+
+                        // Confirm import
+                        if (!confirm('This will replace all current settings and data. Continue?')) {
+                            return;
+                        }
+
+                        // Import all data
+                        if (data.settings) AL.persistence.set('settings', data.settings);
+                        if (data.fields) AL.persistence.set('fields', data.fields);
+                        if (data.rules) AL.persistence.set('rules', data.rules);
+                        if (data.prefixes) AL.persistence.set('prefixes', data.prefixes);
+                        if (data.macros) AL.persistence.set('macros', data.macros);
+                        if (data.favorites) AL.persistence.set('favorites', data.favorites);
+                        if (data.bwcDevices) AL.persistence.set('bwcDevices', data.bwcDevices);
+                        if (data.x10Devices) AL.persistence.set('x10Devices', data.x10Devices);
+                        if (data.scanHistory) AL.persistence.set('scanHistory', data.scanHistory);
+
+                        if (AL.ui && AL.ui.showToast) {
+                            AL.ui.showToast('Import Complete', 'All data imported successfully. Refreshing...', 'success');
+                        }
+
+                        // Reload page to apply changes
+                        setTimeout(() => {
+                            location.reload();
+                        }, 2000);
+
+                    } catch (error) {
+                        console.error('[exportManager] Import error:', error);
+                        if (AL.ui && AL.ui.showToast) {
+                            AL.ui.showToast('Import Failed', error.message, 'error');
+                        }
+                    }
+                };
+
+                reader.readAsText(file);
+            };
+
+            input.click();
         }
     };
 
@@ -8179,30 +8281,48 @@
         },
 
         /**
-         * Handle hotkey press
+         * Handle hotkey press (enhanced with Alt+0/Escape support and enabled check)
          */
         handleHotkey(event) {
-            // Only if Alt + number
+            // Only if Alt key is pressed
             if (!event.altKey) return;
 
+            // Check if we're in an input field
+            const activeEl = document.activeElement;
+            if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+                return;
+            }
+
             const key = event.key;
+
+            // Alt+1 through Alt+9: Activate prefix
             if (key >= '1' && key <= '9') {
                 const hotkeyNum = parseInt(key);
-                const prefix = this.prefixes.find(p => p.hotkey === hotkeyNum);
+                const prefix = this.prefixes.find(p => p.hotkey === hotkeyNum && p.enabled !== false);
 
                 if (prefix) {
                     this.activate(prefix);
                     event.preventDefault();
                 }
             }
+            // Alt+0 or Alt+Escape: Clear prefix
+            else if (key === '0' || key === 'Escape') {
+                if (this.activePrefix) {
+                    this.deactivate();
+                    event.preventDefault();
+                    if (AL.ui && AL.ui.showToast) {
+                        AL.ui.showToast('Prefix Cleared', 'No active prefix', 'info');
+                    }
+                }
+            }
         },
 
         /**
-         * Activate prefix
+         * Activate prefix (enhanced with sticky count display)
          */
         activate(prefix) {
             this.activePrefix = prefix;
-            this.activeStickyCount = prefix.stickyCount || 1;
+            this.activeStickyCount = prefix.stickyCount || prefix.sticky || 1;
 
             console.log('[prefixes] Activated:', prefix.label);
 
@@ -8212,7 +8332,10 @@
             }
 
             if (AL.ui && AL.ui.showToast) {
-                AL.ui.showToast('Prefix Activated', `${prefix.label}: "${prefix.value}"`, 'info');
+                const message = prefix.sticky > 0 ?
+                    `${prefix.label} (${prefix.value}) - ${prefix.sticky} uses` :
+                    `${prefix.label} (${prefix.value})`;
+                AL.ui.showToast('Prefix Active', message, 'info');
             }
         },
 
@@ -9955,16 +10078,17 @@
         },
 
         /**
-         * Process a single scan
+         * Process a single scan (enhanced with metadata support and history tracking)
          */
-        async processScan(scanText, source, timestamp) {
+        async processScan(scanText, source, timestamp, metadata = {}) {
             const result = {
                 scanText,
                 source,
                 timestamp,
                 success: false,
                 matchedRule: null,
-                actions: []
+                actions: [],
+                metadata
             };
 
             // Apply active prefix if any
@@ -9972,6 +10096,14 @@
             if (AL.prefixes.activePrefix) {
                 processedScan = AL.prefixes.activePrefix.value + scanText;
                 AL.prefixes.decrementSticky();
+            }
+
+            // Check for directive override in metadata
+            if (metadata.directive) {
+                // Set type field based on directive
+                await AL.fields?.setFieldValue('type',
+                    metadata.directive === 'Deployment' ? 'Deploy' : 'Return'
+                );
             }
 
             // Run through rules engine
@@ -10007,12 +10139,22 @@
                 if (AL.ui && AL.ui.showToast) {
                     AL.ui.showToast('Scan Processed', `Rule: ${matchResult.rule.name}`, 'success');
                 }
+
+                // Add to history
+                if (AL.capture && AL.capture.addToHistory) {
+                    AL.capture.addToHistory(scanText, source, 1, 'success', matchResult.rule.name);
+                }
             } else {
                 // No matching rule
                 result.success = false;
 
                 if (AL.ui && AL.ui.showToast) {
                     AL.ui.showToast('No Match', `No rule matched: ${scanText}`, 'warning');
+                }
+
+                // Add to history
+                if (AL.capture && AL.capture.addToHistory) {
+                    AL.capture.addToHistory(scanText, source, 0, 'warning', 'No match');
                 }
             }
 
