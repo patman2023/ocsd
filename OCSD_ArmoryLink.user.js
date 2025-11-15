@@ -1489,6 +1489,7 @@
             this.createTicker();
             this.createBubble();
             this.createStripLauncher();
+            this.initVisualEnhancements();  // Initialize visual enhancements
             this.addDebugLog('system', '[ui] Initialized');
         },
 
@@ -2802,6 +2803,521 @@
                 *:focus-visible {
                     outline: 2px solid var(--accent-primary);
                     outline-offset: 2px;
+                }
+
+                /* ============================================
+                   ENHANCED VISUAL DESIGN - 20X ENHANCEMENTS
+                   ============================================ */
+
+                /* Import additional modern fonts */
+                @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap');
+
+                /* Enhanced CSS Variables with Animations */
+                :root {
+                    /* Advanced Animation Timings */
+                    --spring-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+                    --smooth-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+                    --elastic: cubic-bezier(0.68, -0.6, 0.32, 1.6);
+
+                    /* Depth System */
+                    --shadow-inner-glow: inset 0 0 20px rgba(var(--accent-rgb), 0.1);
+                    --shadow-neumorphic: 20px 20px 60px rgba(0,0,0,0.15),
+                                         -20px -20px 60px rgba(255,255,255,0.05);
+
+                    /* RGB values for themes (default dark) */
+                    --accent-rgb: 56, 189, 248;
+                    --bg-primary-rgb: 15, 23, 42;
+                    --bg-secondary-rgb: 30, 41, 59;
+                    --bg-elevated-rgb: 30, 41, 59;
+                    --glass-bg-rgb: 15, 23, 42;
+                }
+
+                /* ============================================
+                   OCSD SHERIFF THEME - PREMIUM ENHANCEMENT
+                   ============================================ */
+                [data-al-theme="ocsd-sheriff"] {
+                    --accent-rgb: 201, 162, 39;
+
+                    /* Animated gradient backgrounds */
+                    --bg-primary: linear-gradient(135deg,
+                        #0a0a0a 0%,
+                        #1c2822 25%,
+                        #0b3b2e 50%,
+                        #1c2822 75%,
+                        #0a0a0a 100%);
+                    --bg-animated-size: 400% 400%;
+
+                    /* Gold shimmer effect */
+                    --gold-shimmer: linear-gradient(
+                        105deg,
+                        transparent 40%,
+                        rgba(201, 162, 39, 0.4) 50%,
+                        transparent 60%
+                    );
+                }
+
+                /* Animated background for Sheriff theme */
+                [data-al-theme="ocsd-sheriff"] #al-panel {
+                    background-size: var(--bg-animated-size);
+                    animation: tacticalShift 20s ease infinite;
+                    position: relative;
+                }
+
+                @keyframes tacticalShift {
+                    0%, 100% { background-position: 0% 50%; }
+                    25% { background-position: 100% 50%; }
+                    50% { background-position: 100% 100%; }
+                    75% { background-position: 0% 100%; }
+                }
+
+                /* Sheriff badge effect on header */
+                [data-al-theme="ocsd-sheriff"] #al-header::after {
+                    content: '★';
+                    position: absolute;
+                    left: 50px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    font-size: 24px;
+                    color: #c9a227;
+                    filter: drop-shadow(0 0 10px #c9a227);
+                    animation: badgePulse 2s ease-in-out infinite;
+                }
+
+                @keyframes badgePulse {
+                    0%, 100% {
+                        transform: translateY(-50%) scale(1);
+                        filter: drop-shadow(0 0 10px #c9a227);
+                    }
+                    50% {
+                        transform: translateY(-50%) scale(1.1);
+                        filter: drop-shadow(0 0 20px #c9a227);
+                    }
+                }
+
+                /* ============================================
+                   HIGH CONTRAST - CYBER ENHANCEMENT
+                   ============================================ */
+                [data-al-theme="high-contrast"] {
+                    --accent-rgb: 0, 255, 255;
+                    --cyber-grid: repeating-linear-gradient(
+                        0deg,
+                        transparent,
+                        transparent 2px,
+                        rgba(0, 255, 255, 0.03) 2px,
+                        rgba(0, 255, 255, 0.03) 4px
+                    );
+                }
+
+                /* Cyber grid overlay */
+                [data-al-theme="high-contrast"] #al-panel::before {
+                    content: '';
+                    position: absolute;
+                    inset: 0;
+                    background: var(--cyber-grid);
+                    pointer-events: none;
+                    animation: gridScroll 10s linear infinite;
+                    z-index: 0;
+                }
+
+                @keyframes gridScroll {
+                    0% { transform: translateY(0); }
+                    100% { transform: translateY(40px); }
+                }
+
+                /* Glitch effect for High Contrast */
+                [data-al-theme="high-contrast"] #al-header h3 {
+                    position: relative;
+                    animation: glitchText 8s infinite;
+                }
+
+                @keyframes glitchText {
+                    0%, 94%, 100% {
+                        text-shadow: none;
+                        filter: none;
+                    }
+                    95% {
+                        text-shadow: -2px 0 #ff0000, 2px 0 #00ffff;
+                        filter: blur(0.5px);
+                    }
+                    96% {
+                        text-shadow: 2px 0 #ff0000, -2px 0 #00ffff;
+                        filter: blur(0);
+                    }
+                }
+
+                /* ============================================
+                   LIGHT THEME - GLASS MORPHISM PREMIUM
+                   ============================================ */
+                [data-al-theme="light"] {
+                    --accent-rgb: 59, 130, 246;
+                    --bg-primary-rgb: 255, 255, 255;
+                    --bg-secondary-rgb: 241, 245, 249;
+                    --glass-bg-rgb: 255, 255, 255;
+                    --aurora-gradient: linear-gradient(
+                        135deg,
+                        rgba(59, 130, 246, 0.1) 0%,
+                        rgba(147, 51, 234, 0.1) 25%,
+                        rgba(236, 72, 153, 0.1) 50%,
+                        rgba(59, 130, 246, 0.1) 100%
+                    );
+                }
+
+                /* Aurora effect for light theme */
+                [data-al-theme="light"] #al-panel::after {
+                    content: '';
+                    position: absolute;
+                    inset: -50%;
+                    background: var(--aurora-gradient);
+                    background-size: 200% 200%;
+                    animation: auroraFlow 15s ease infinite;
+                    filter: blur(40px);
+                    opacity: 0.5;
+                    pointer-events: none;
+                    z-index: -1;
+                }
+
+                @keyframes auroraFlow {
+                    0%, 100% {
+                        transform: rotate(0deg);
+                        background-position: 0% 0%;
+                    }
+                    50% {
+                        transform: rotate(180deg);
+                        background-position: 100% 100%;
+                    }
+                }
+
+                /* ============================================
+                   DARK THEME - NEON GLOW ENHANCEMENT
+                   ============================================ */
+                [data-al-theme="dark"] {
+                    --accent-rgb: 56, 189, 248;
+                    --neon-pulse: 0 0 20px rgba(56, 189, 248, 0.5),
+                                  0 0 40px rgba(56, 189, 248, 0.3),
+                                  0 0 60px rgba(56, 189, 248, 0.1);
+                }
+
+                /* Neon border animation */
+                [data-al-theme="dark"] #al-panel::before {
+                    content: '';
+                    position: absolute;
+                    inset: -2px;
+                    background: linear-gradient(
+                        45deg,
+                        #38bdf8, #22d3ee, #38bdf8, #22d3ee
+                    );
+                    border-radius: inherit;
+                    z-index: -1;
+                    opacity: 0.2;
+                    animation: neonRotate 3s linear infinite;
+                }
+
+                @keyframes neonRotate {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+
+                /* ============================================
+                   UNIVERSAL ENHANCEMENTS - ALL THEMES
+                   ============================================ */
+
+                /* Enhanced Panel with z-index management */
+                #al-panel {
+                    position: relative;
+                    z-index: 1;
+                }
+
+                #al-panel > * {
+                    position: relative;
+                    z-index: 2;
+                }
+
+                /* Premium Buttons with Liquid Effect */
+                .al-btn {
+                    position: relative;
+                    overflow: hidden;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    transition: all 0.3s var(--spring-bounce);
+                }
+
+                /* Liquid animation on hover */
+                .al-btn::after {
+                    content: '';
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    width: 0;
+                    height: 0;
+                    border-radius: 50%;
+                    background: rgba(255, 255, 255, 0.3);
+                    transform: translate(-50%, -50%);
+                    transition: width 0.6s, height 0.6s;
+                    z-index: 0;
+                }
+
+                .al-btn:hover::after {
+                    width: 300px;
+                    height: 300px;
+                }
+
+                .al-btn:hover {
+                    transform: translateY(-2px) scale(1.02);
+                    box-shadow:
+                        0 8px 25px rgba(var(--accent-rgb), 0.3),
+                        0 0 40px rgba(var(--accent-rgb), 0.15);
+                    filter: brightness(1.1);
+                }
+
+                .al-btn:active {
+                    transform: translateY(-1px) scale(1.01);
+                    transition: all 0.1s;
+                }
+
+                /* Ensure button text is above the liquid effect */
+                .al-btn > * {
+                    position: relative;
+                    z-index: 1;
+                }
+
+                /* Magnetic Button Effect */
+                .al-btn-icon {
+                    transition: all 0.3s var(--elastic);
+                }
+
+                .al-btn-icon:hover {
+                    transform: scale(1.2);
+                    box-shadow: 0 0 40px rgba(var(--accent-rgb), 0.3);
+                }
+
+                /* Enhanced Inputs with Focus Glow */
+                .al-input:focus,
+                .al-select:focus,
+                .al-textarea:focus {
+                    box-shadow:
+                        0 0 0 3px rgba(var(--accent-rgb), 0.1),
+                        0 0 20px rgba(var(--accent-rgb), 0.2),
+                        inset 0 0 10px rgba(var(--accent-rgb), 0.05);
+                    transform: scale(1.01);
+                }
+
+                /* Enhanced Scrollbar */
+                ::-webkit-scrollbar {
+                    width: 10px;
+                    height: 10px;
+                }
+
+                ::-webkit-scrollbar-track {
+                    background: rgba(var(--bg-secondary-rgb, 0,0,0), 0.3);
+                    border-radius: 10px;
+                }
+
+                ::-webkit-scrollbar-thumb {
+                    background: linear-gradient(
+                        180deg,
+                        var(--accent-primary),
+                        rgba(var(--accent-rgb), 0.6)
+                    );
+                    border-radius: 10px;
+                    border: 2px solid transparent;
+                    background-clip: padding-box;
+                }
+
+                ::-webkit-scrollbar-thumb:hover {
+                    background: var(--accent-primary);
+                    box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.3);
+                }
+
+                /* Premium Toast Notifications */
+                .al-toast {
+                    position: relative;
+                    overflow: hidden;
+                    animation: toastSlideInBounce 0.5s var(--spring-bounce);
+                }
+
+                @keyframes toastSlideInBounce {
+                    0% {
+                        transform: translateX(400px) scale(0.8);
+                        opacity: 0;
+                    }
+                    70% {
+                        transform: translateX(-20px) scale(1.02);
+                    }
+                    100% {
+                        transform: translateX(0) scale(1);
+                        opacity: 1;
+                    }
+                }
+
+                .al-toast::before {
+                    content: '';
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    bottom: 0;
+                    width: 4px;
+                    background: linear-gradient(
+                        180deg,
+                        var(--accent-primary),
+                        transparent
+                    );
+                    animation: toastGlow 2s ease-in-out infinite;
+                }
+
+                @keyframes toastGlow {
+                    0%, 100% {
+                        opacity: 1;
+                        box-shadow: 0 0 10px var(--accent-primary);
+                    }
+                    50% {
+                        opacity: 0.5;
+                        box-shadow: 0 0 20px var(--accent-primary);
+                    }
+                }
+
+                /* Success Animation */
+                .al-toast.success::after {
+                    content: '✓';
+                    position: absolute;
+                    right: 20px;
+                    top: 50%;
+                    transform: translateY(-50%) scale(0);
+                    font-size: 24px;
+                    color: var(--accent-success);
+                    animation: successPop 0.5s 0.3s var(--spring-bounce) forwards;
+                }
+
+                @keyframes successPop {
+                    0% { transform: translateY(-50%) scale(0) rotate(-180deg); }
+                    100% { transform: translateY(-50%) scale(1) rotate(0deg); }
+                }
+
+                /* Animated Ticker with Wave Effect */
+                #al-ticker::before {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: -100%;
+                    width: 100%;
+                    height: 2px;
+                    background: linear-gradient(
+                        90deg,
+                        transparent,
+                        var(--accent-primary),
+                        transparent
+                    );
+                    animation: tickerWave 3s linear infinite;
+                }
+
+                @keyframes tickerWave {
+                    0% { left: -100%; }
+                    100% { left: 100%; }
+                }
+
+                /* Status Dot Radar Effect */
+                .al-ticker-status-dot {
+                    position: relative;
+                    box-shadow:
+                        0 0 0 2px rgba(var(--accent-rgb), 0.3),
+                        0 0 20px currentColor;
+                }
+
+                .al-ticker-status-dot::after {
+                    content: '';
+                    position: absolute;
+                    inset: -8px;
+                    border: 2px solid currentColor;
+                    border-radius: 50%;
+                    opacity: 0;
+                    animation: radarPing 2s ease-out infinite;
+                }
+
+                @keyframes radarPing {
+                    0% {
+                        transform: scale(0.5);
+                        opacity: 1;
+                    }
+                    100% {
+                        transform: scale(2);
+                        opacity: 0;
+                    }
+                }
+
+                /* Loading State */
+                .al-loading {
+                    position: relative;
+                    color: transparent !important;
+                    pointer-events: none;
+                }
+
+                .al-loading::after {
+                    content: '';
+                    position: absolute;
+                    width: 16px;
+                    height: 16px;
+                    top: 50%;
+                    left: 50%;
+                    margin-left: -8px;
+                    margin-top: -8px;
+                    border: 2px solid var(--accent-primary);
+                    border-radius: 50%;
+                    border-top-color: transparent;
+                    animation: spinner 0.6s linear infinite;
+                }
+
+                @keyframes spinner {
+                    to { transform: rotate(360deg); }
+                }
+
+                /* Ripple Effect for Clicks */
+                .ripple {
+                    position: absolute;
+                    border-radius: 50%;
+                    background: rgba(255, 255, 255, 0.5);
+                    transform: scale(0);
+                    animation: ripple-animation 0.6s ease-out;
+                    pointer-events: none;
+                }
+
+                @keyframes ripple-animation {
+                    to {
+                        transform: scale(4);
+                        opacity: 0;
+                    }
+                }
+
+                /* Premium Modal Overlay */
+                .al-modal-overlay {
+                    animation: fadeIn 0.3s ease-out;
+                }
+
+                @keyframes fadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+
+                /* Header shimmer effect */
+                #al-header::before {
+                    content: '';
+                    position: absolute;
+                    bottom: 0;
+                    left: 0;
+                    right: 0;
+                    height: 2px;
+                    background: linear-gradient(
+                        90deg,
+                        transparent,
+                        var(--accent-primary),
+                        var(--accent-primary),
+                        transparent
+                    );
+                    animation: shimmer 3s ease-in-out infinite;
+                }
+
+                @keyframes shimmer {
+                    0% { transform: translateX(-100%); }
+                    100% { transform: translateX(100%); }
                 }
             `);
         },
@@ -7160,6 +7676,184 @@
          */
         updateStatus() {
             this.updateTicker();
+        },
+
+        /**
+         * Add micro-interactions for enhanced UX
+         */
+        addMicroInteractions() {
+            // Ripple effect on button clicks
+            document.addEventListener('click', (e) => {
+                if (e.target.closest('.al-btn, .al-btn-icon')) {
+                    const button = e.target.closest('.al-btn, .al-btn-icon');
+                    const ripple = document.createElement('span');
+                    ripple.classList.add('ripple');
+
+                    const rect = button.getBoundingClientRect();
+                    const size = Math.max(rect.width, rect.height);
+                    const x = e.clientX - rect.left - size / 2;
+                    const y = e.clientY - rect.top - size / 2;
+
+                    ripple.style.width = ripple.style.height = size + 'px';
+                    ripple.style.left = x + 'px';
+                    ripple.style.top = y + 'px';
+
+                    button.appendChild(ripple);
+
+                    setTimeout(() => ripple.remove(), 600);
+                }
+            });
+
+            // Magnetic button effect (simplified for performance)
+            document.addEventListener('mousemove', (e) => {
+                if (e.target.classList.contains('al-btn-icon')) {
+                    const btn = e.target;
+                    const rect = btn.getBoundingClientRect();
+                    const x = e.clientX - rect.left - rect.width / 2;
+                    const y = e.clientY - rect.top - rect.height / 2;
+
+                    btn.style.transform = `translate(${x * 0.2}px, ${y * 0.2}px) scale(1.1)`;
+                }
+            });
+
+            document.addEventListener('mouseleave', (e) => {
+                if (e.target.classList.contains('al-btn-icon')) {
+                    e.target.style.transform = '';
+                }
+            }, true);
+        },
+
+        /**
+         * Add theme-specific animations based on current theme
+         */
+        addThemeAnimations() {
+            const theme = document.documentElement.getAttribute('data-al-theme');
+
+            // Remove any existing theme effects
+            const existingScanLine = document.querySelector('.al-scan-line');
+            if (existingScanLine) {
+                existingScanLine.remove();
+            }
+
+            switch(theme) {
+                case 'ocsd-sheriff':
+                    this.addTacticalEffects();
+                    break;
+                case 'high-contrast':
+                    this.addCyberEffects();
+                    break;
+                case 'light':
+                    this.addAuroraEffects();
+                    break;
+                case 'dark':
+                    this.addNeonEffects();
+                    break;
+            }
+        },
+
+        /**
+         * Add tactical scanning effects for OCSD Sheriff theme
+         */
+        addTacticalEffects() {
+            // Add scanning line effect
+            const scanLine = document.createElement('div');
+            scanLine.className = 'al-scan-line';
+            scanLine.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 2px;
+                background: linear-gradient(90deg, transparent, #c9a227, transparent);
+                animation: scan 8s linear infinite;
+                pointer-events: none;
+                z-index: 10000;
+            `;
+
+            if (!document.querySelector('.al-scan-animation-style')) {
+                const style = document.createElement('style');
+                style.className = 'al-scan-animation-style';
+                style.textContent = `
+                    @keyframes scan {
+                        0% { top: 0%; }
+                        100% { top: 100%; }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+
+            document.body.appendChild(scanLine);
+        },
+
+        /**
+         * Add cyber effects for High Contrast theme
+         */
+        addCyberEffects() {
+            // Add terminal cursor blink to inputs
+            document.querySelectorAll('.al-input').forEach(input => {
+                input.style.caretColor = '#00ffff';
+            });
+        },
+
+        /**
+         * Add aurora effects for Light theme
+         */
+        addAuroraEffects() {
+            // Smooth color transitions (subtle effect)
+            // This is handled via CSS, no additional JS needed
+        },
+
+        /**
+         * Add neon glow effects for Dark theme
+         */
+        addNeonEffects() {
+            // Add text shadows for neon glow on primary buttons
+            document.querySelectorAll('.al-btn-primary').forEach(btn => {
+                btn.style.textShadow = '0 0 10px currentColor';
+            });
+        },
+
+        /**
+         * Enable performance optimized animations
+         */
+        enableSmoothTransitions() {
+            // Use CSS containment for better performance
+            const panels = document.querySelectorAll('#al-panel, .al-card');
+            panels.forEach(panel => {
+                panel.style.contain = 'layout style paint';
+            });
+
+            // Enable hardware acceleration for animated elements
+            const animated = document.querySelectorAll('[class*="animate"], .al-btn, #al-tabs button');
+            animated.forEach(el => {
+                el.style.willChange = 'transform, opacity';
+            });
+        },
+
+        /**
+         * Initialize all visual enhancements
+         */
+        initVisualEnhancements() {
+            // Wait for DOM to be ready
+            setTimeout(() => {
+                this.addMicroInteractions();
+                this.addThemeAnimations();
+                this.enableSmoothTransitions();
+
+                // Re-apply theme animations on theme change
+                const observer = new MutationObserver((mutations) => {
+                    mutations.forEach(mutation => {
+                        if (mutation.attributeName === 'data-al-theme') {
+                            this.addThemeAnimations();
+                        }
+                    });
+                });
+
+                observer.observe(document.documentElement, {
+                    attributes: true,
+                    attributeFilter: ['data-al-theme']
+                });
+            }, 100);
         }
     };
 
