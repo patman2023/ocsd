@@ -1785,13 +1785,8 @@
                 const ctx = AL.pageState?.getActiveTabContext();
                 if (!ctx) return;
 
-                // Build ticker parts per spec: mode, Type, PID, prefix, last asset
+                // Build ticker parts: PID, Vehicle (Type shown via background color)
                 const tickerParts = [];
-
-                // Add Type if available
-                if (ctx.type) {
-                    tickerParts.push(ctx.type);
-                }
 
                 // Add PID/User if available
                 if (ctx.userFull) {
@@ -1861,14 +1856,15 @@
                 this.ticker.style.color = textColor;
 
                 // Build ticker HTML with optimized format
-                // Format: ● Type | PID | Vehicle | Asset1 | Asset2 | ... [PREFIX]
+                // Format: ● PID | Vehicle | Asset1 | Asset2 | ... [PREFIX]
+                // (Type shown via background color: yellow=Deployment, green=Return)
                 let tickerHTML = `
                     <span style="display: flex; align-items: center;">
                         <span class="al-ticker-status-dot ${modeDotClass}"></span>
                     </span>
                 `;
 
-                // Add ticker parts (Type, PID, Vehicle) with separator
+                // Add ticker parts (PID, Vehicle) with separator
                 if (tickerParts.length > 0) {
                     tickerHTML += `<span style="font-weight: 600;">${AL.utils.escapeHtml(tickerParts[0])}</span>`;
                     for (let i = 1; i < tickerParts.length; i++) {
