@@ -1785,7 +1785,27 @@
                 const ctx = AL.pageState?.getActiveTabContext();
                 if (!ctx) return;
 
-                // Build asset parts (ONLY pill values from weapon, taser, and patrol fields)
+                // Build ticker parts per spec: mode, Type, PID, prefix, last asset
+                const tickerParts = [];
+
+                // Add Type if available
+                if (ctx.type) {
+                    tickerParts.push(ctx.type);
+                }
+
+                // Add PID/User if available
+                if (ctx.userFull) {
+                    tickerParts.push(ctx.userFull);
+                } else if (ctx.userLast && ctx.userLast !== 'NO USER') {
+                    tickerParts.push(ctx.userLast);
+                }
+
+                // Add Vehicle if available
+                if (ctx.vehicle) {
+                    tickerParts.push(`Vehicle: ${ctx.vehicle}`);
+                }
+
+                // Build asset parts from pills (weapon, taser, patrol)
                 const assetParts = [];
 
                 // Add weapon pills
@@ -1801,6 +1821,11 @@
                 // Add patrol pills
                 if (ctx.patrolPills && ctx.patrolPills.length > 0) {
                     assetParts.push(...ctx.patrolPills);
+                }
+
+                // Add Control One Radio if available
+                if (ctx.controlOneRadio) {
+                    assetParts.push(`Radio: ${ctx.controlOneRadio}`);
                 }
 
                 // Get prefix text if active
@@ -1836,27 +1861,40 @@
                 this.ticker.style.color = textColor;
 
                 // Build ticker HTML with optimized format
-                // Format: ● ASSET1 | ASSET2 | ... [PREFIX]
+                // Format: ● Type | PID | Vehicle | Asset1 | Asset2 | ... [PREFIX]
                 let tickerHTML = `
                     <span style="display: flex; align-items: center;">
                         <span class="al-ticker-status-dot ${modeDotClass}"></span>
                     </span>
                 `;
 
+                // Add ticker parts (Type, PID, Vehicle) with separator
+                if (tickerParts.length > 0) {
+                    tickerHTML += `<span style="font-weight: 600;">${AL.utils.escapeHtml(tickerParts[0])}</span>`;
+                    for (let i = 1; i < tickerParts.length; i++) {
+                        tickerHTML += ` <span style="opacity: 0.5;">|</span> <span style="font-weight: 500;">${AL.utils.escapeHtml(tickerParts[i])}</span>`;
+                    }
+                }
+
                 // Add assets with separator
                 if (assetParts.length > 0) {
-                    tickerHTML += `<span style="font-weight: 500;">${AL.utils.escapeHtml(assetParts[0])}</span>`;
-                    for (let i = 1; i < assetParts.length; i++) {
-                        tickerHTML += `<span>|</span><span>${AL.utils.escapeHtml(assetParts[i])}</span>`;
+                    if (tickerParts.length > 0) {
+                        tickerHTML += ` <span style="opacity: 0.5;">|</span> `;
                     }
-                } else {
-                    // Show a subtle message when no assets are selected
-                    tickerHTML += `<span style="font-weight: 400; opacity: 0.7;">No assets selected</span>`;
+                    tickerHTML += `<span style="font-weight: 400;">${AL.utils.escapeHtml(assetParts[0])}</span>`;
+                    for (let i = 1; i < assetParts.length; i++) {
+                        tickerHTML += ` <span style="opacity: 0.5;">|</span> <span style="font-weight: 400;">${AL.utils.escapeHtml(assetParts[i])}</span>`;
+                    }
+                }
+
+                // If nothing to show
+                if (tickerParts.length === 0 && assetParts.length === 0) {
+                    tickerHTML += `<span style="font-weight: 400; opacity: 0.7;">No data</span>`;
                 }
 
                 // Add prefix if active
                 if (prefixText) {
-                    tickerHTML += `<span style="color: ${prefixColor}; margin-left: 10px;">${AL.utils.escapeHtml(prefixText)}</span>`;
+                    tickerHTML += ` <span style="color: ${prefixColor}; margin-left: 10px; font-weight: 600;">[${AL.utils.escapeHtml(prefixText)}]</span>`;
                 }
 
                 this.ticker.innerHTML = tickerHTML;
