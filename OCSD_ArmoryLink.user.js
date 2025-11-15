@@ -2704,6 +2704,21 @@
             `;
             this.panel.appendChild(header);
 
+            // Setup theme selector event listener immediately after header is created
+            const headerThemeSelector = header.querySelector('#al-theme-selector');
+            if (headerThemeSelector) {
+                const currentTheme = settings.theme || 'dark';
+                headerThemeSelector.value = currentTheme;
+                console.log('[ui] Header theme selector found and initialized with theme:', currentTheme);
+
+                headerThemeSelector.addEventListener('change', (e) => {
+                    console.log('[ui] Header theme selector changed to:', e.target.value);
+                    this.setTheme(e.target.value);
+                });
+            } else {
+                console.error('[ui] Header theme selector not found in header element!');
+            }
+
             // Modern Tabs
             const tabs = document.createElement('div');
             tabs.id = 'al-tabs';
@@ -2730,23 +2745,6 @@
             // Event listeners
             document.getElementById('al-close').onclick = () => this.togglePanel();
             document.getElementById('al-minimize').onclick = () => this.togglePanel();
-
-            // Theme selector in header
-            const themeSelector = document.getElementById('al-theme-selector');
-            if (themeSelector) {
-                // Set current theme
-                const currentTheme = settings.theme || 'dark';
-                themeSelector.value = currentTheme;
-                console.log('[ui] Header theme selector initialized with theme:', currentTheme);
-
-                // Listen for changes
-                themeSelector.addEventListener('change', (e) => {
-                    console.log('[ui] Header theme selector changed to:', e.target.value);
-                    this.setTheme(e.target.value);
-                });
-            } else {
-                console.error('[ui] Could not find header theme selector (#al-theme-selector)');
-            }
 
             // Dock toggle button
             const dockToggle = document.getElementById('al-dock-toggle');
