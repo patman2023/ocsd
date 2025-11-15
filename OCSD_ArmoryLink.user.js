@@ -1119,6 +1119,7 @@
         ticker: null,
         toast: null,
         stripLauncher: null,
+        _lastFocusedVariableInput: null, // Track last focused input for variable insertion
 
         init() {
             this.loadSettings();
@@ -2819,6 +2820,28 @@
         },
 
         /**
+         * Insert a variable token at the cursor position in the last focused input
+         */
+        insertVariableToken(token) {
+            const input = this._lastFocusedVariableInput;
+            if (!input) {
+                this.showToast('No Input Selected', 'Please focus on an input field first', 'warning');
+                return;
+            }
+
+            const cursorPos = input.selectionStart || input.value.length;
+            const textBefore = input.value.substring(0, cursorPos);
+            const textAfter = input.value.substring(cursorPos);
+
+            input.value = textBefore + token + textAfter;
+
+            // Set cursor position after the inserted token
+            const newCursorPos = cursorPos + token.length;
+            input.setSelectionRange(newCursorPos, newCursorPos);
+            input.focus();
+        },
+
+        /**
          * Show add action dialog with proper form controls
          */
         showAddActionDialog() {
@@ -2852,18 +2875,6 @@
                             </select>
                         </div>
 
-                        <!-- Available Variables Reference -->
-                        <div style="background: #1e1e1e; padding: 12px; margin-bottom: 15px; border-radius: 4px; border-left: 3px solid #4CAF50;">
-                            <div style="font-weight: bold; margin-bottom: 8px; font-size: 13px;">📋 Available Variables:</div>
-                            <div style="font-size: 11px; line-height: 1.6;">
-                                <div style="margin-bottom: 4px;"><code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${scanRaw}</code> - Full scanned barcode (raw)</div>
-                                <div style="margin-bottom: 4px;"><code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${cleanScan}</code> - Scanned barcode (trimmed)</div>
-                                <div style="margin-bottom: 4px;"><code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${last4}</code> - Last 4 characters of barcode</div>
-                                <div style="margin-bottom: 4px;"><code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${directive}</code> - Directive value (Deployment/Return)</div>
-                                <div style="margin-bottom: 4px;"><code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${group1}</code>, <code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">\${group2}</code>, ... - Regex capture groups</div>
-                            </div>
-                        </div>
-
                         <!-- setField form -->
                         <div id="al-action-form-setField" style="display: none;">
                             <div class="al-form-group">
@@ -2879,7 +2890,7 @@
                             <div class="al-form-group">
                                 <label>Value *</label>
                                 <input type="text" class="al-input" id="al-action-field-value" placeholder="e.g., \${scanRaw}, \${cleanScan}, \${group1}">
-                                <small>Use variables from reference above</small>
+                                <small>Use dropdown below to insert variables at cursor</small>
                             </div>
                         </div>
 
@@ -2909,7 +2920,7 @@
                             <div class="al-form-group">
                                 <label>Message *</label>
                                 <input type="text" class="al-input" id="al-action-toast-message" placeholder="e.g., Scanned: \${last4}">
-                                <small>Use variables from reference above</small>
+                                <small>Use dropdown below to insert variables at cursor</small>
                             </div>
                             <div class="al-form-group">
                                 <label>Level</label>
@@ -2927,7 +2938,32 @@
                             <div class="al-form-group">
                                 <label>Speech Text *</label>
                                 <input type="text" class="al-input" id="al-action-speech-text" placeholder="e.g., PID \${last4}">
-                                <small>Use variables from reference above</small>
+                                <small>Use dropdown below to insert variables at cursor</small>
+                            </div>
+                        </div>
+
+                        <!-- Variable Insertion Tool -->
+                        <div class="al-form-group" style="background: #252525; padding: 12px; margin-bottom: 15px; border-radius: 4px;">
+                            <label style="font-weight: bold; margin-bottom: 8px; display: block;">🔧 Insert Variable</label>
+                            <div style="display: flex; gap: 8px; align-items: flex-start;">
+                                <select class="al-input" id="al-variable-selector" style="flex: 1;">
+                                    <option value="">-- Select Variable to Insert --</option>
+                                    <option value="\${scanRaw}">\${scanRaw} - Full barcode</option>
+                                    <option value="\${cleanScan}">\${cleanScan} - Trimmed barcode</option>
+                                    <option value="\${last4}">\${last4} - Last 4 characters</option>
+                                    <option value="\${directive}">\${directive} - Directive (Deploy/Return)</option>
+                                    <option value="\${group1}">\${group1} - Regex group 1</option>
+                                    <option value="\${group2}">\${group2} - Regex group 2</option>
+                                    <option value="\${group3}">\${group3} - Regex group 3</option>
+                                    <option value="__custom__">Other / Custom regex group...</option>
+                                </select>
+                            </div>
+                            <div id="al-custom-group-container" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #333;">
+                                <label style="font-size: 12px; margin-bottom: 5px; display: block;">Custom Regex Group #</label>
+                                <div style="display: flex; gap: 8px;">
+                                    <input type="number" class="al-input" id="al-custom-group-number" placeholder="e.g., 4, 5, 6..." min="1" style="flex: 1;">
+                                    <button class="al-btn al-btn-secondary" id="al-insert-custom-group-btn" style="white-space: nowrap;">Insert</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2962,6 +2998,75 @@
                 typeValueSelect.onchange = (e) => {
                     document.getElementById('al-type-custom-group').style.display =
                         e.target.value === '' ? 'block' : 'none';
+                };
+            }
+
+            // Track focus on all value input fields that can receive variables
+            const variableInputs = [
+                'al-action-field-value',
+                'al-action-type-custom',
+                'al-action-toast-title',
+                'al-action-toast-message',
+                'al-action-speech-text'
+            ];
+
+            variableInputs.forEach(id => {
+                const input = document.getElementById(id);
+                if (input) {
+                    input.onfocus = () => {
+                        this._lastFocusedVariableInput = input;
+                    };
+                }
+            });
+
+            // Variable selector dropdown
+            const variableSelector = document.getElementById('al-variable-selector');
+            if (variableSelector) {
+                variableSelector.onchange = (e) => {
+                    const selectedValue = e.target.value;
+
+                    if (selectedValue === '__custom__') {
+                        // Show custom group input
+                        document.getElementById('al-custom-group-container').style.display = 'block';
+                    } else if (selectedValue) {
+                        // Insert the selected variable
+                        this.insertVariableToken(selectedValue);
+                        // Reset dropdown
+                        e.target.value = '';
+                        // Hide custom group container if it was shown
+                        document.getElementById('al-custom-group-container').style.display = 'none';
+                    }
+                };
+            }
+
+            // Custom group insert button
+            const insertCustomGroupBtn = document.getElementById('al-insert-custom-group-btn');
+            if (insertCustomGroupBtn) {
+                insertCustomGroupBtn.onclick = () => {
+                    const groupNumber = document.getElementById('al-custom-group-number').value;
+                    if (!groupNumber || groupNumber < 1) {
+                        this.showToast('Invalid Group', 'Please enter a valid group number (1 or greater)', 'warning');
+                        return;
+                    }
+
+                    // Insert the custom group variable
+                    this.insertVariableToken(`\${group${groupNumber}}`);
+
+                    // Reset and hide custom group container
+                    document.getElementById('al-custom-group-number').value = '';
+                    document.getElementById('al-custom-group-container').style.display = 'none';
+                    document.getElementById('al-variable-selector').value = '';
+                };
+            }
+
+            // Allow Enter key to insert custom group
+            const customGroupInput = document.getElementById('al-custom-group-number');
+            if (customGroupInput) {
+                customGroupInput.onkeypress = (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        insertCustomGroupBtn.click();
+                    }
                 };
             }
 
