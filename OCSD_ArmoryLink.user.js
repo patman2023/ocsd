@@ -3417,6 +3417,31 @@
             const existingEffects = document.querySelectorAll('.al-theme-effect');
             existingEffects.forEach(el => el.remove());
 
+            // Clear inline styles from previous theme effects
+            if (this.panel) {
+                // Clear header styles
+                const header = this.panel.querySelector('.al-header');
+                if (header) {
+                    header.style.background = '';
+                    header.style.backgroundSize = '';
+                    header.style.animation = '';
+                }
+
+                // Clear button styles
+                const buttons = this.panel.querySelectorAll('.al-btn');
+                buttons.forEach(btn => {
+                    btn.style.background = '';
+                    btn.style.backgroundSize = '';
+                    btn.style.animation = '';
+                });
+
+                // Clear tab styles
+                const tabs = this.panel.querySelectorAll('.al-tab');
+                tabs.forEach(tab => {
+                    tab.style.animation = '';
+                });
+            }
+
             switch(theme) {
                 case 'ocsd-sheriff':
                     this.addTacticalEffects();
@@ -3587,6 +3612,8 @@
                     this.style.animation = 'iridescent 2s ease infinite';
                 });
                 el.addEventListener('mouseleave', function() {
+                    this.style.background = '';
+                    this.style.backgroundSize = '';
                     this.style.animation = '';
                 });
             });
