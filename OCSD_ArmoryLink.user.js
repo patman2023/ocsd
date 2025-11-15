@@ -1489,7 +1489,12 @@
             this.createTicker();
             this.createBubble();
             this.createStripLauncher();
-            this.initVisualEnhancements();  // Initialize 20X visual enhancements
+
+            // Initialize visual enhancements after panel is fully rendered
+            setTimeout(() => {
+                this.initVisualEnhancements();
+            }, 100);
+
             this.addDebugLog('system', '[ui] Initialized');
         },
 
@@ -3153,7 +3158,19 @@
          * Initialize 20X Visual Enhancements
          */
         initVisualEnhancements() {
+            if (!this.panel) {
+                console.warn('[ui] Panel not found, skipping visual enhancements');
+                return;
+            }
+
             console.log('[ui] Initializing 20X Visual Enhancements...');
+
+            // Ensure panel maintains fixed positioning
+            const computedStyle = window.getComputedStyle(this.panel);
+            if (computedStyle.position !== 'fixed') {
+                console.warn('[ui] Panel position is not fixed, forcing it');
+                this.panel.style.position = 'fixed';
+            }
 
             // Add micro-interactions
             this.addMicroInteractions();
@@ -3174,9 +3191,12 @@
          * Add micro-interactions to UI elements
          */
         addMicroInteractions() {
+            if (!this.panel) return;
+
             // Enhanced button interactions with liquid fill effect
             const addButtonEffects = () => {
-                const buttons = document.querySelectorAll('.al-btn, button[class*="al-"]');
+                // Scope to panel only
+                const buttons = this.panel.querySelectorAll('.al-btn, button[class*="al-"]');
                 buttons.forEach(btn => {
                     if (btn.dataset.enhanced) return; // Skip if already enhanced
                     btn.dataset.enhanced = 'true';
@@ -3233,7 +3253,8 @@
 
             // Enhanced input field interactions
             const addInputEffects = () => {
-                const inputs = document.querySelectorAll('input[type="text"], input[type="number"], textarea, select');
+                // Scope to panel only
+                const inputs = this.panel.querySelectorAll('input[type="text"], input[type="number"], textarea, select');
                 inputs.forEach(input => {
                     if (input.dataset.enhanced) return;
                     input.dataset.enhanced = 'true';
@@ -3257,7 +3278,8 @@
 
             // Enhanced tab interactions
             const addTabEffects = () => {
-                const tabs = document.querySelectorAll('.al-tab');
+                // Scope to panel only
+                const tabs = this.panel.querySelectorAll('.al-tab');
                 tabs.forEach(tab => {
                     if (tab.dataset.enhanced) return;
                     tab.dataset.enhanced = 'true';
@@ -3292,12 +3314,10 @@
                 addTabEffects();
             });
 
-            if (this.panel) {
-                observer.observe(this.panel, {
-                    childList: true,
-                    subtree: true
-                });
-            }
+            observer.observe(this.panel, {
+                childList: true,
+                subtree: true
+            });
         },
 
         /**
